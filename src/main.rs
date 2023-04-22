@@ -1,5 +1,7 @@
 use std::error::Error;
 
+mod pow;
+
 use futures::StreamExt;
 use libp2p::core::upgrade::Version;
 use libp2p::swarm::keep_alive::Behaviour;

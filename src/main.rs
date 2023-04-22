@@ -8,12 +8,15 @@ use libp2p::swarm::keep_alive::Behaviour;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, noise, swarm::SwarmBuilder, tcp, yamux};
 use libp2p::{PeerId, Transport};
+use log::info;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    pretty_env_logger::init();
+
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    info!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
@@ -33,8 +36,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
-            SwarmEvent::Behaviour(event) => println!("{event:?}"),
+            SwarmEvent::NewListenAddr { address, .. } => info!("Listening on {address:?}"),
+            SwarmEvent::Behaviour(event) => info!("{event:?}"),
             _ => {}
         }
     }

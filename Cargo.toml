@@ -10,9 +10,13 @@ arrayref = "0.3.7"
 async-std = { version = "1.12.0", features = ["attributes"] }
 async-trait = "0.1.68"
 bytes = "1.4.0"
+erased-serde = "0.3.25"
 futures = "0.3.28"
 hmac-sha512 = "1.1.4"
 libp2p = { version = "0.51.3", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux"] }
 log = "0.4.17"
 multiaddr = "0.17.1"
 pretty_env_logger = "0.4.0"
+serde = { version = "1.0.160", features = ["derive"] }
+serde_cbor = "0.11.2"
+serde_repr = "0.1.12"

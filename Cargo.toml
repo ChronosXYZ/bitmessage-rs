@@ -1,5 +1,5 @@
 [package]
-name = "rust-bitmessage"
+name = "bitmessage-rs"
 version = "0.1.0"
 edition = "2021"
 

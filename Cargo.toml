@@ -13,7 +13,7 @@ bytes = "1.4.0"
 erased-serde = "0.3.25"
 futures = "0.3.28"
 hmac-sha512 = "1.1.4"
-libp2p = { version = "0.51.3", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux"] }
+libp2p = { version = "0.51.3", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux", "gossipsub", "request-response"] }
 log = "0.4.17"
 multiaddr = "0.17.1"
 pretty_env_logger = "0.4.0"

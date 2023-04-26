@@ -25,7 +25,7 @@ impl Address {
         }
     }
 
-    fn new_with_public_key(pid: PeerId, public_key: PublicKey) -> Self {
+    fn with_public_key(pid: PeerId, public_key: PublicKey) -> Self {
         let mut address = Self::new(pid);
         if let Some(res) = pid.is_public_key(&public_key) {
             if res {

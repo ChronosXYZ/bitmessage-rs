@@ -1,7 +1,7 @@
 use std::error::Error;
 
+mod network;
 mod pow;
-mod protocol;
 
 use futures::StreamExt;
 use libp2p::core::upgrade::Version;

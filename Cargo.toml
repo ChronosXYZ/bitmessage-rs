@@ -20,3 +20,4 @@ pretty_env_logger = "0.4.0"
 serde = { version = "1.0.160", features = ["derive"] }
 serde_cbor = "0.11.2"
 serde_repr = "0.1.12"
+thiserror = "1.0.40"

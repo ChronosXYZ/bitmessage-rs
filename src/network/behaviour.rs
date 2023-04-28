@@ -4,7 +4,10 @@ use async_trait::async_trait;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p::{
     core::upgrade::{read_length_prefixed, write_length_prefixed},
-    gossipsub,
+    gossipsub, identify, identity,
+    kad::{
+        record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult,
+    },
     request_response::{self, Codec, ProtocolName},
     swarm::NetworkBehaviour,
 };
@@ -23,10 +26,10 @@ impl ProtocolName for BitmessageProtocol {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BitmessageRequest(super::messages::NetworkMessage);
+pub struct BitmessageRequest(pub super::messages::NetworkMessage);
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BitmessageResponse(super::messages::MessagePayload);
+pub struct BitmessageResponse(pub super::messages::NetworkMessage);
 
 impl BitmessageProtocolCodec {
     async fn _read_data<T, B>(&self, io: &mut B) -> io::Result<T>
@@ -127,5 +130,7 @@ impl Codec for BitmessageProtocolCodec {
 #[derive(NetworkBehaviour)]
 pub struct BitmessageNetBehaviour {
     pub gossipsub: gossipsub::Behaviour,
+    pub identify: identify::Behaviour,
+    pub kademlia: Kademlia<MemoryStore>,
     pub rpc: request_response::Behaviour<BitmessageProtocolCodec>,
 }

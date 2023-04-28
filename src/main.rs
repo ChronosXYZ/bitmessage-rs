@@ -8,7 +8,7 @@ mod pow;
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
 
-    let node = Node::new();
+    let mut node = Node::new(None);
 
     node.run().await;
     Ok(())

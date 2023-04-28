@@ -29,8 +29,8 @@ pub enum MessageCommand {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NetworkMessage {
-    command: MessageCommand,
-    payload: MessagePayload,
+    pub command: MessageCommand,
+    pub payload: MessagePayload,
 }
 
 #[derive(Serialize_repr, Deserialize_repr, Debug)]

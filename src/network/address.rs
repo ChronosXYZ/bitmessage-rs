@@ -31,7 +31,7 @@ impl Address {
             if res {
                 address.public_key = Option::Some(public_key);
             } else {
-                error!("public key doesn't match with actual address");
+                error!("public key doesn't match provided address (peer id)");
             }
         }
         return address;

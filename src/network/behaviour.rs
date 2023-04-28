@@ -12,9 +12,9 @@ use log::error;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
-struct BitmessageProtocol();
+pub struct BitmessageProtocol();
 #[derive(Clone)]
-struct BitmessageProtocolCodec();
+pub struct BitmessageProtocolCodec();
 
 impl ProtocolName for BitmessageProtocol {
     fn protocol_name(&self) -> &[u8] {
@@ -23,10 +23,10 @@ impl ProtocolName for BitmessageProtocol {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct BitmessageRequest(super::messages::NetworkMessage);
+pub struct BitmessageRequest(super::messages::NetworkMessage);
 
 #[derive(Serialize, Deserialize, Debug)]
-struct BitmessageResponse(super::messages::MessagePayload);
+pub struct BitmessageResponse(super::messages::MessagePayload);
 
 impl BitmessageProtocolCodec {
     async fn _read_data<T, B>(&self, io: &mut B) -> io::Result<T>
@@ -125,7 +125,7 @@ impl Codec for BitmessageProtocolCodec {
 }
 
 #[derive(NetworkBehaviour)]
-struct BitmessageNetBehaviour {
-    gossipsub: gossipsub::Behaviour,
-    rpc: request_response::Behaviour<BitmessageProtocolCodec>,
+pub struct BitmessageNetBehaviour {
+    pub gossipsub: gossipsub::Behaviour,
+    pub rpc: request_response::Behaviour<BitmessageProtocolCodec>,
 }

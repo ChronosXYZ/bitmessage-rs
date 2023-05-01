@@ -28,4 +28,8 @@ impl NodeClient {
             .expect("Command receiver not to be dropped");
         receiver.await.expect("Sender not to be dropped")
     }
+
+    pub fn shutdown(&mut self) {
+        self.sender.close_channel();
+    }
 }

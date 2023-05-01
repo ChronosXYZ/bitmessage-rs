@@ -22,7 +22,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut signals = Signals::new(&[SIGTERM])?;
 
     for sig in signals.forever() {
-        println!("Received signal {:?}", sig);
+        log::debug!("Received signal {:?}", sig);
+        client.shutdown();
+        return Ok(());
     }
 
     Ok(())

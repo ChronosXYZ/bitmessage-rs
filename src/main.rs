@@ -1,5 +1,7 @@
-use crate::network::node::Node;
 use std::error::Error;
+
+use async_std::task;
+use signal_hook::{consts::SIGTERM, iterator::Signals};
 
 mod network;
 mod pow;
@@ -8,8 +10,20 @@ mod pow;
 async fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
 
-    let mut node = Node::new(None);
+    let (mut client, worker) = network::new(None);
 
-    node.run().await;
+    task::spawn(worker.run());
+
+    client
+        .start_listening("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+        .await
+        .expect("Listening not to fail");
+
+    let mut signals = Signals::new(&[SIGTERM])?;
+
+    for sig in signals.forever() {
+        println!("Received signal {:?}", sig);
+    }
+
     Ok(())
 }

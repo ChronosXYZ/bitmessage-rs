@@ -4,10 +4,8 @@ use async_trait::async_trait;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p::{
     core::upgrade::{read_length_prefixed, write_length_prefixed},
-    gossipsub, identify, identity,
-    kad::{
-        record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult,
-    },
+    gossipsub, identify,
+    kad::{record::store::MemoryStore, Kademlia, KademliaEvent},
     request_response::{self, Codec, ProtocolName},
     swarm::NetworkBehaviour,
 };
@@ -128,9 +126,44 @@ impl Codec for BitmessageProtocolCodec {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(out_event = "BitmessageBehaviourEvent")]
 pub struct BitmessageNetBehaviour {
     pub gossipsub: gossipsub::Behaviour,
     pub identify: identify::Behaviour,
     pub kademlia: Kademlia<MemoryStore>,
     pub rpc: request_response::Behaviour<BitmessageProtocolCodec>,
+}
+
+#[derive(Debug)]
+pub enum BitmessageBehaviourEvent {
+    RequestResponse(request_response::Event<BitmessageRequest, BitmessageResponse>),
+    Kademlia(KademliaEvent),
+    Identify(identify::Event),
+    Gossipsub(gossipsub::Event),
+}
+
+impl From<request_response::Event<BitmessageRequest, BitmessageResponse>>
+    for BitmessageBehaviourEvent
+{
+    fn from(event: request_response::Event<BitmessageRequest, BitmessageResponse>) -> Self {
+        BitmessageBehaviourEvent::RequestResponse(event)
+    }
+}
+
+impl From<KademliaEvent> for BitmessageBehaviourEvent {
+    fn from(event: KademliaEvent) -> Self {
+        BitmessageBehaviourEvent::Kademlia(event)
+    }
+}
+
+impl From<identify::Event> for BitmessageBehaviourEvent {
+    fn from(value: identify::Event) -> Self {
+        BitmessageBehaviourEvent::Identify(value)
+    }
+}
+
+impl From<gossipsub::Event> for BitmessageBehaviourEvent {
+    fn from(value: gossipsub::Event) -> Self {
+        BitmessageBehaviourEvent::Gossipsub(value)
+    }
 }

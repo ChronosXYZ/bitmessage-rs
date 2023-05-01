@@ -19,11 +19,11 @@ use super::{
     messages::{MessageCommand, MessagePayload, NetworkMessage},
 };
 
-struct Handler {}
+struct Handler;
 
 impl Handler {
     fn new() -> Handler {
-        Handler {}
+        Handler
     }
 
     fn handle_request(&self, req: BitmessageRequest) -> NetworkMessage {
@@ -130,7 +130,7 @@ impl Node {
         }
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(mut self) {
         loop {
             match self.swarm.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => info!("Listening on {address:?}"),
@@ -206,8 +206,17 @@ fn extract_peer_id_from_multiaddr(
 
 #[cfg(test)]
 mod tests {
+    use async_std::task;
 
-    // TODO
-    #[test]
-    fn it_works() {}
+    use super::*;
+
+    #[async_std::test]
+    async fn it_works() {
+        let n1 = Node::new(None);
+        let n1_listeners = n1.swarm.listeners().last().unwrap().clone();
+        task::spawn(n1.run());
+
+        let n2 = Node::new(Some(vec![n1_listeners]));
+        task::block_on(n2.run());
+    }
 }

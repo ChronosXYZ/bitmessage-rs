@@ -184,6 +184,9 @@ impl NodeWorker {
                     debug!("received response on {request_id}: {:?}", response);
                 }
             },
+            SwarmEvent::Behaviour(BitmessageBehaviourEvent::Identify(e)) => {
+                self.handle_identify_event(e)
+            }
             _ => {}
         }
     }
@@ -220,8 +223,8 @@ impl NodeWorker {
 
     /// When we receive IdentityInfo, if the peer supports our Kademlia protocol, we add
     /// their listen addresses to the DHT, so they will be propagated to other peers.
-    fn handle_identify_event(&mut self, identify_event: Box<identify::Event>) {
-        log::debug!("Received identify::Event: {:?}", *identify_event);
+    fn handle_identify_event(&mut self, identify_event: identify::Event) {
+        log::debug!("Received identify::Event: {:?}", identify_event);
 
         if let identify::Event::Received {
             peer_id,
@@ -231,7 +234,7 @@ impl NodeWorker {
                     protocols,
                     ..
                 },
-        } = *identify_event
+        } = identify_event
         {
             if protocols
                 .iter()

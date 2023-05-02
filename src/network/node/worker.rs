@@ -63,8 +63,11 @@ pub enum WorkerCommand {
         peer: Multiaddr,
         sender: oneshot::Sender<Result<(), Box<dyn Error + Send>>>,
     },
-    GetListenerAddresses {
-        sender: oneshot::Sender<Vec<Multiaddr>>,
+    GetListenerAddress {
+        sender: oneshot::Sender<Multiaddr>,
+    },
+    GetPeerID {
+        sender: oneshot::Sender<PeerId>,
     },
 }
 
@@ -73,6 +76,7 @@ pub struct NodeWorker {
     swarm: Swarm<BitmessageNetBehaviour>,
     handler: Handler,
     command_receiver: mpsc::Receiver<WorkerCommand>,
+    pending_commands: Vec<WorkerCommand>,
 }
 
 impl NodeWorker {
@@ -146,6 +150,7 @@ impl NodeWorker {
             swarm,
             handler: Handler::new(),
             command_receiver,
+            pending_commands: Vec::new(),
         }
     }
 
@@ -160,7 +165,27 @@ impl NodeWorker {
         >,
     ) {
         match event {
-            SwarmEvent::NewListenAddr { address, .. } => info!("Listening on {address:?}"),
+            SwarmEvent::NewListenAddr { address, .. } => {
+                info!("Listening on {address:?}");
+                let indexes: Vec<usize> = self
+                    .pending_commands
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, v)| match v {
+                        WorkerCommand::GetListenerAddress { sender: _ } => Some(i.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                for i in indexes {
+                    if let WorkerCommand::GetListenerAddress { sender } =
+                        self.pending_commands.remove(i)
+                    {
+                        sender
+                            .send(address.clone())
+                            .expect("Receiver not to be dropped");
+                    }
+                }
+            }
             SwarmEvent::Behaviour(BitmessageBehaviourEvent::RequestResponse(
                 request_response::Event::Message { message, .. },
             )) => match message {
@@ -195,14 +220,24 @@ impl NodeWorker {
         match command {
             WorkerCommand::StartListening { multiaddr, sender } => {
                 debug!("Starting listening to the network...");
-                let _ = match self.swarm.listen_on(multiaddr) {
+                let _ = match self.swarm.listen_on(multiaddr.clone()) {
                     Ok(_) => sender.send(Ok(())),
                     Err(e) => sender.send(Err(Box::new(e))),
                 };
             }
             WorkerCommand::Dial { peer, sender } => todo!(),
-            WorkerCommand::GetListenerAddresses { sender } => todo!(),
-        }
+            WorkerCommand::GetListenerAddress { sender } => {
+                if let Some(v) = self.swarm.listeners().next() {
+                    sender.send(v.clone()).expect("Receiver not to be dropped");
+                } else {
+                    self.pending_commands
+                        .push(WorkerCommand::GetListenerAddress { sender });
+                }
+            }
+            WorkerCommand::GetPeerID { sender } => sender
+                .send(self.local_peer_id)
+                .expect("Receiver not to be dropped"),
+        };
     }
 
     pub async fn run(mut self) {

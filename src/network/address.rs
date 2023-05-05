@@ -5,11 +5,12 @@ use libp2p::{
 };
 use log::error;
 
-struct Address {
+pub struct Address {
     hash: PeerId,
     tag: Vec<u8>,
     public_decryption_key: Keypair,
     public_key: Option<PublicKey>,
+    keypair: Option<Keypair>,
 }
 
 impl Address {
@@ -22,6 +23,7 @@ impl Address {
             tag,
             public_decryption_key,
             public_key: Option::None,
+            keypair: Option::None,
         }
     }
 

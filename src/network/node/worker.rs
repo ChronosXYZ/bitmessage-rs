@@ -16,39 +16,17 @@ use libp2p::{
 };
 use log::{debug, info};
 
-use crate::network::{
-    behaviour::{
+use crate::{
+    network::behaviour::{
         BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
-        BitmessageProtocolCodec, BitmessageRequest, BitmessageResponse,
+        BitmessageProtocolCodec, BitmessageResponse,
     },
-    messages::{MessageCommand, MessagePayload, NetworkMessage},
+    repositories::memory::{
+        address::MemoryAddressRepository, inventory::MemoryInventoryRepository,
+    },
 };
 
-struct Handler;
-
-impl Handler {
-    fn new() -> Handler {
-        Handler
-    }
-
-    fn handle_request(&self, req: BitmessageRequest) -> NetworkMessage {
-        match req.0.command {
-            MessageCommand::GetData => todo!(),
-            MessageCommand::Inv => todo!(),
-            MessageCommand::ReqInv => self.handle_get_inv_message(req.0.payload),
-            MessageCommand::Object => todo!(),
-        }
-    }
-
-    fn handle_get_inv_message(&self, _: MessagePayload) -> NetworkMessage {
-        return NetworkMessage {
-            command: MessageCommand::Inv,
-            payload: MessagePayload::Inv {
-                inventory: Vec::new(),
-            },
-        };
-    }
-}
+use super::handler::Handler;
 
 const IDENTIFY_PROTO_NAME: &str = "/bitmessage/id/1.0.0";
 const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
@@ -148,7 +126,10 @@ impl NodeWorker {
         Self {
             local_peer_id,
             swarm,
-            handler: Handler::new(),
+            handler: Handler::new(
+                Box::new(MemoryAddressRepository::new()),
+                Box::new(MemoryInventoryRepository::new()),
+            ),
             command_receiver,
             pending_commands: Vec::new(),
         }
@@ -195,7 +176,7 @@ impl NodeWorker {
                     channel,
                 } => {
                     debug!("received request {request_id}: {:?}", request);
-                    let msg = self.handler.handle_request(request);
+                    let msg = self.handler.handle_message(request.0).await.unwrap();
                     self.swarm
                         .behaviour_mut()
                         .rpc

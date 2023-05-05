@@ -5,6 +5,7 @@ use signal_hook::{consts::SIGTERM, iterator::Signals};
 
 mod network;
 mod pow;
+mod repositories;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {

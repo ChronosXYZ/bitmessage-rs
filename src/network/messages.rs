@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
+pub type InventoryVector = Vec<Vec<u8>>;
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Object {
@@ -13,9 +15,9 @@ pub enum Object {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum MessagePayload {
-    GetData { inventory: Vec<Vec<u8>> },
-    Inv { inventory: Vec<Vec<u8>> },
-    Object(Object),
+    GetData { inventory: InventoryVector },
+    Inv { inventory: InventoryVector },
+    Objects(Vec<Object>),
     None,
 }
 
@@ -24,7 +26,7 @@ pub enum MessageCommand {
     GetData,
     Inv,
     ReqInv,
-    Object,
+    Objects,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

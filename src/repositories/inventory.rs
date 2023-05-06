@@ -19,8 +19,8 @@ pub trait InventoryRepository {
     ) -> Result<Vec<Vec<u8>>, Box<dyn Error>>;
 
     /// Store received object
-    async fn store_object(&mut self, o: Object) -> Result<(), Box<dyn Error>>;
+    async fn store_object(&mut self, hash: Vec<u8>, o: Object) -> Result<(), Box<dyn Error>>;
 
     /// Cleanup the storage of expired items
-    async fn cleanup(&self) -> Result<i32, Box<dyn Error>>;
+    async fn cleanup(&mut self) -> Result<usize, Box<dyn Error>>;
 }

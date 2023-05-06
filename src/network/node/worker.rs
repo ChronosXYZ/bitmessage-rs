@@ -207,14 +207,15 @@ impl NodeWorker {
                 };
             }
             WorkerCommand::Dial { peer, sender } => todo!(),
-            WorkerCommand::GetListenerAddress { sender } => {
-                if let Some(v) = self.swarm.listeners().next() {
+            WorkerCommand::GetListenerAddress { sender } => match self.swarm.listeners().next() {
+                Some(v) => {
                     sender.send(v.clone()).expect("Receiver not to be dropped");
-                } else {
+                }
+                None => {
                     self.pending_commands
                         .push(WorkerCommand::GetListenerAddress { sender });
                 }
-            }
+            },
             WorkerCommand::GetPeerID { sender } => sender
                 .send(self.local_peer_id)
                 .expect("Receiver not to be dropped"),

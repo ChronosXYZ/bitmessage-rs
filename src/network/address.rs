@@ -5,12 +5,13 @@ use libp2p::{
 };
 use log::error;
 
+#[derive(Debug, Clone)]
 pub struct Address {
-    hash: PeerId,
-    tag: Vec<u8>,
-    public_decryption_key: Keypair,
-    public_key: Option<PublicKey>,
-    keypair: Option<Keypair>,
+    pub hash: PeerId,
+    pub tag: Vec<u8>,
+    pub public_decryption_key: Keypair,
+    pub public_key: Option<PublicKey>,
+    pub keypair: Option<Keypair>,
 }
 
 impl Address {

@@ -35,7 +35,7 @@ pub struct NetworkMessage {
     pub payload: MessagePayload,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, Debug, Clone)]
 #[repr(u8)]
 pub enum MsgEncoding {
     Ignore = 0,
@@ -44,7 +44,7 @@ pub enum MsgEncoding {
     Extended = 3,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UnencryptedMsg {
     behavior_bitfield: u32,
     public_signing_key: Vec<u8>,
@@ -52,5 +52,15 @@ pub struct UnencryptedMsg {
     destination_ripe: Vec<u8>,
     encoding: MsgEncoding,
     message: Vec<u8>,
+    signature: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UnencryptedPubkey {
+    behaviour_bitfield: u32,
+    public_signing_key: Vec<u8>,
+    public_encryption_key: Vec<u8>,
+    nonce_trials_per_byte: u64,
+    extra_bytes: u64,
     signature: Vec<u8>,
 }

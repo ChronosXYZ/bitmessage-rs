@@ -1,4 +1,11 @@
-use std::{borrow::Cow, error::Error, io, iter};
+use std::{borrow::Cow, error::Error, io, iter, time::Duration};
+
+use diesel::{
+    connection::SimpleConnection,
+    r2d2::{ConnectionManager, Pool},
+    SqliteConnection,
+};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use futures::{
     channel::{mpsc, oneshot},
@@ -6,8 +13,7 @@ use futures::{
 };
 use libp2p::{
     core::upgrade::Version,
-    gossipsub::{self, HandlerError},
-    identify, identity,
+    gossipsub, identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     noise,
     request_response::{self, ProtocolSupport},
@@ -21,8 +27,9 @@ use crate::{
         BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
         BitmessageProtocolCodec, BitmessageResponse,
     },
-    repositories::memory::{
-        address::MemoryAddressRepository, inventory::MemoryInventoryRepository,
+    repositories::sqlite::{
+        address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
+        message::SqliteMessageRepository,
     },
 };
 
@@ -30,6 +37,33 @@ use super::handler::Handler;
 
 const IDENTIFY_PROTO_NAME: &str = "/bitmessage/id/1.0.0";
 const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
+
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/repositories/sqlite/migrations");
+
+#[derive(Debug)]
+pub struct DbConnectionOpts {
+    pub enable_wal: bool,
+    pub enable_foreign_keys: bool,
+    pub busy_timeout: Option<Duration>,
+}
+
+impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error> for DbConnectionOpts {
+    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
+        (|| {
+            if self.enable_wal {
+                conn.batch_execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
+            }
+            if self.enable_foreign_keys {
+                conn.batch_execute("PRAGMA foreign_keys = ON;")?;
+            }
+            if let Some(d) = self.busy_timeout {
+                conn.batch_execute(&format!("PRAGMA busy_timeout = {};", d.as_millis()))?;
+            }
+            Ok(())
+        })()
+        .map_err(diesel::r2d2::Error::QueryError)
+    }
+}
 
 #[derive(Debug)]
 pub enum WorkerCommand {
@@ -55,6 +89,7 @@ pub struct NodeWorker {
     handler: Handler,
     command_receiver: mpsc::Receiver<WorkerCommand>,
     pending_commands: Vec<WorkerCommand>,
+    sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
 }
 
 impl NodeWorker {
@@ -68,8 +103,8 @@ impl NodeWorker {
 
         let transport = tcp::async_io::Transport::default()
             .upgrade(Version::V1Lazy)
-            .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
-            .multiplex(yamux::YamuxConfig::default())
+            .authenticate(noise::Config::new(&local_key).unwrap())
+            .multiplex(yamux::Config::default())
             .boxed();
 
         let mut swarm = SwarmBuilder::with_async_std_executor(
@@ -123,15 +158,40 @@ impl NodeWorker {
                 .unwrap();
         }
 
+        let dirs = xdg::BaseDirectories::with_prefix("bitmessage-rs").unwrap();
+        let mut db_url = dirs.create_data_directory("db").unwrap();
+        db_url.push("db");
+        db_url.set_file_name("database");
+        db_url.set_extension("db");
+        debug!("{:?}", db_url.to_str().unwrap());
+
+        let pool = Pool::builder()
+            .max_size(16)
+            .connection_customizer(Box::new(DbConnectionOpts {
+                enable_wal: true,
+                enable_foreign_keys: true,
+                busy_timeout: Some(Duration::from_secs(30)),
+            }))
+            .build(ConnectionManager::<SqliteConnection>::new(
+                db_url.into_os_string().into_string().unwrap(),
+            ))
+            .unwrap();
+
+        let conn = &mut pool.get().unwrap();
+        conn.run_pending_migrations(MIGRATIONS)
+            .expect("migrations won't fail");
+
         Self {
             local_peer_id,
             swarm,
             handler: Handler::new(
-                Box::new(MemoryAddressRepository::new()),
-                Box::new(MemoryInventoryRepository::new()),
+                Box::new(SqliteAddressRepository::new(pool.clone())),
+                Box::new(SqliteInventoryRepository::new(pool.clone())),
+                Box::new(SqliteMessageRepository::new(pool.clone())),
             ),
             command_receiver,
             pending_commands: Vec::new(),
+            sqlite_connection_pool: pool,
         }
     }
 
@@ -140,7 +200,7 @@ impl NodeWorker {
         event: SwarmEvent<
             BitmessageBehaviourEvent,
             Either<
-                Either<Either<HandlerError, io::Error>, io::Error>,
+                Either<Either<void::Void, io::Error>, io::Error>,
                 ConnectionHandlerUpgrErr<io::Error>,
             >,
         >,

@@ -1,25 +1,31 @@
 use crate::{
-    network::messages::{MessageCommand, MessagePayload, NetworkMessage, Object},
-    repositories::{address::AddressRepository, inventory::InventoryRepository},
+    network::messages::{MessageCommand, MessagePayload, NetworkMessage, Object, ObjectKind},
+    repositories::{
+        address::AddressRepositorySync, inventory::InventoryRepositorySync,
+        message::MessageRepositorySync,
+    },
 };
 
 pub struct Handler {
-    address_repo: Box<dyn AddressRepository + Send + Sync>,
-    inventory_repo: Box<dyn InventoryRepository + Send + Sync>,
+    address_repo: Box<AddressRepositorySync>,
+    inventory_repo: Box<InventoryRepositorySync>,
+    message_repo: Box<MessageRepositorySync>,
 }
 
 impl Handler {
     pub fn new(
-        address_repo: Box<dyn AddressRepository + Send + Sync>,
-        inventory_repo: Box<dyn InventoryRepository + Send + Sync>,
+        address_repo: Box<AddressRepositorySync>,
+        inventory_repo: Box<InventoryRepositorySync>,
+        message_repo: Box<MessageRepositorySync>,
     ) -> Handler {
         Handler {
             address_repo,
             inventory_repo,
+            message_repo,
         }
     }
 
-    pub async fn handle_message(&self, msg: NetworkMessage) -> Option<NetworkMessage> {
+    pub async fn handle_message(&mut self, msg: NetworkMessage) -> Option<NetworkMessage> {
         match msg.command {
             MessageCommand::GetData => Some(self.handle_get_data(msg.payload).await),
             MessageCommand::Inv => self.handle_inv(msg.payload).await,
@@ -44,28 +50,25 @@ impl Handler {
     }
 
     async fn handle_inv(&self, payload: MessagePayload) -> Option<NetworkMessage> {
-        let inv = if let MessagePayload::Inv { inventory } = payload {
+        let mut inv = if let MessagePayload::Inv { inventory } = payload {
             inventory
         } else {
             Vec::new()
         };
-        let missing_objects = self
-            .inventory_repo
-            .get_missing_objects(inv)
+        self.inventory_repo
+            .get_missing_objects(&mut inv)
             .await
             .expect("Repo not to fail");
-        if !missing_objects.is_empty() {
+        if !inv.is_empty() {
             return Some(NetworkMessage {
                 command: MessageCommand::GetData,
-                payload: MessagePayload::GetData {
-                    inventory: missing_objects,
-                },
+                payload: MessagePayload::GetData { inventory: inv },
             });
         }
         None
     }
 
-    async fn handle_objects(&self, payload: MessagePayload) {
+    async fn handle_objects(&mut self, payload: MessagePayload) {
         let objects: Vec<Object> = if let MessagePayload::Objects(obj) = payload {
             obj
         } else {
@@ -73,12 +76,54 @@ impl Handler {
             return;
         };
 
-        for obj in objects {
-            match obj {
-                Object::Msg { encrypted } => todo!(),
-                Object::Broadcast { tag, encrypted } => todo!(),
-                Object::Getpubkey { tag } => todo!(),
-                Object::Pubkey { tag, encrypted } => todo!(),
+        'outer: for obj in objects {
+            match obj.kind {
+                ObjectKind::Msg { encrypted } => {
+                    let identities = self
+                        .address_repo
+                        .get_identities()
+                        .await
+                        .expect("Address repo not to fail");
+                    for i in identities {
+                        let decryption_result = ecies::decrypt(
+                            &i.private_encryption_key.unwrap().serialize(),
+                            &encrypted,
+                        );
+                        if let Ok(msg) = decryption_result {
+                            log::debug!("message object successfully decrypted! saving it...");
+                            match serde_cbor::from_slice(msg.as_slice()) {
+                                Ok(msg) => {
+                                    self.message_repo
+                                        .save(bs58::encode(&obj.hash).into_string(), msg)
+                                        .await
+                                        .expect("repo not to fail");
+                                }
+                                Err(e) => {
+                                    log::error!("received malformed message! skipping it");
+                                    continue 'outer;
+                                }
+                            }
+                        }
+                    }
+                }
+                ObjectKind::Broadcast { tag, encrypted } => {
+                    log::warn!("we don't support broadcast msgs at the moment");
+                    continue 'outer;
+                }
+                ObjectKind::Getpubkey { tag } => {
+                    let identities = self
+                        .address_repo
+                        .get_identities()
+                        .await
+                        .expect("repo not to fail");
+                    for i in identities {
+                        if i.tag == tag {
+                            log::debug!("someone requested our pubkey! sending it out...");
+                            // TODO send out our pubkey
+                        }
+                    }
+                }
+                ObjectKind::Pubkey { tag, encrypted } => todo!(),
             }
         }
     }

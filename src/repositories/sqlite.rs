@@ -1,4 +1,5 @@
 pub mod address;
 pub mod inventory;
 pub mod message;
-pub mod sqlite;
+pub mod models;
+pub mod schema;

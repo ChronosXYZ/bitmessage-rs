@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -27,6 +28,7 @@ impl ObjectKind {
 pub struct Object {
     pub hash: Vec<u8>,
     pub nonce: u64,
+    pub expires: i64,
     pub kind: ObjectKind,
 }
 

@@ -1,5 +1,8 @@
+use log::warn;
+
 use crate::{
     network::messages::{MessageCommand, MessagePayload, NetworkMessage, Object, ObjectKind},
+    pow,
     repositories::{
         address::AddressRepositorySync, inventory::InventoryRepositorySync,
         message::MessageRepositorySync,
@@ -77,6 +80,20 @@ impl Handler {
         };
 
         'outer: for obj in objects {
+            let target = pow::get_pow_target(
+                &obj,
+                pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,
+                pow::NETWORK_MIN_EXTRA_BYTES,
+            );
+            let pow_check_res = pow::check_pow(target, obj.nonce.clone(), obj.hash.clone());
+            if pow_check_res.is_err() {
+                log::warn!(
+                    "object with hash {:?} has invalid nonce! skipping it",
+                    bs58::encode(obj.hash).into_string()
+                );
+                continue;
+            }
+
             match obj.kind {
                 ObjectKind::Msg { encrypted } => {
                     let identities = self

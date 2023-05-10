@@ -5,7 +5,7 @@ use diesel::{
 use std::error::Error;
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use diesel::{ExpressionMethods, QueryDsl, SqliteConnection};
 
 use crate::{
@@ -53,11 +53,12 @@ impl InventoryRepository for SqliteInventoryRepository {
         let model = &obj[0];
         let kind: ObjectKind =
             serde_cbor::from_slice(&model.data).expect("data not to be malformed");
-
         let nonce = u64::from_le_bytes(model.nonce.clone().try_into().unwrap());
+
         Ok(Some(Object {
             hash: bs58::decode(&hash).into_vec().unwrap(),
             nonce,
+            ttl: model.expires.timestamp(),
             kind,
         }))
     }
@@ -91,7 +92,7 @@ impl InventoryRepository for SqliteInventoryRepository {
             nonce: o.nonce.to_le_bytes().to_vec(),
             object_type: o.kind.object_type() as i32,
             data,
-            expires: (Utc::now() + chrono::Duration::seconds(3600)).naive_utc(),
+            expires: NaiveDateTime::from_timestamp_opt(o.ttl, 0).unwrap(),
         };
         diesel::insert_into(schema::inventory::table)
             .values(&model)

@@ -339,20 +339,3 @@ fn extract_peer_id_from_multiaddr(
         _ => Err("Multiaddr does not contain peer_id".into()),
     }
 }
-
-//#[cfg(test)]
-//mod tests {
-//    use async_std::task;
-//
-//    use super::*;
-//
-//    #[async_std::test]
-//    async fn it_works() {
-//        let n1 = NodeWorker::new(None);
-//        let n1_listeners = n1.swarm.listeners().last().unwrap().clone();
-//        task::spawn(n1.run());
-//
-//        let n2 = NodeWorker::new(Some(vec![n1_listeners]));
-//        task::block_on(n2.run());
-//    }
-//}

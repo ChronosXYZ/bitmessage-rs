@@ -26,7 +26,7 @@ impl ObjectKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Object {
     pub hash: Vec<u8>,
-    pub nonce: Vec<u8>,
+    pub nonce: u64,
     pub kind: ObjectKind,
 }
 

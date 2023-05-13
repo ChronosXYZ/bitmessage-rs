@@ -49,6 +49,7 @@ impl HandlerWorker {
     }
 
     async fn run(mut self) {
+        log::debug!("handler worker event loop started");
         loop {
             match self.receiver.next().await {
                 Some(c) => match c {
@@ -67,7 +68,8 @@ impl HandlerWorker {
                         let (sender, receiver) = oneshot::channel();
                         self.worker_sender
                             .send(WorkerCommand::BroadcastMsgByPubSub { sender, msg })
-                            .await;
+                            .await
+                            .expect("receiver not to be dropped");
                         if let Err(e) = receiver.await.expect("receiver not to be dropped") {
                             log::error!(
                                 "error occured while broadcasting message by pubsub: {:?}",
@@ -323,15 +325,17 @@ impl Handler {
                 );
 
                 let mut sender = self.handler_worker_sender.clone();
-                task::spawn(pow::do_pow(target, obj.hash.clone())).then(
-                    move |(_, nonce)| async move {
-                        obj.nonce = nonce;
-                        sender
-                            .send(HandlerWorkerCommand::NonceCalculated { obj })
-                            .await
-                            .expect("receiver not to be dropped");
-                    },
-                );
+                task::spawn((move || async move {
+                    pow::do_pow(target, obj.hash.clone())
+                        .then(move |(_, nonce)| async move {
+                            obj.nonce = nonce;
+                            sender
+                                .send(HandlerWorkerCommand::NonceCalculated { obj })
+                                .await
+                                .expect("receiver not to be dropped");
+                        })
+                        .await;
+                })());
             }
         }
 
@@ -389,7 +393,8 @@ impl Handler {
         let (sender, receiver) = oneshot::channel();
         self.worker_event_sender
             .send(WorkerCommand::BroadcastMsgByPubSub { sender, msg })
-            .await;
+            .await
+            .expect("receiver not to be dropped");
         receiver.await.unwrap()
     }
 

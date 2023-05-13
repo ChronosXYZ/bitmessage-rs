@@ -13,7 +13,7 @@ use futures::{
 };
 use libp2p::{
     core::upgrade::Version,
-    gossipsub::{self, Sha256Topic, Topic},
+    gossipsub::{self, Sha256Topic},
     identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     noise,
@@ -190,7 +190,11 @@ impl NodeWorker {
         conn.run_pending_migrations(MIGRATIONS)
             .expect("migrations won't fail");
         let topic = Sha256Topic::new(COMMON_PUBSUB_TOPIC);
-        swarm.behaviour_mut().gossipsub.subscribe(&topic);
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&topic)
+            .expect("subscription not to fail");
 
         let (sender, receiver) = mpsc::channel(0);
 
@@ -317,6 +321,7 @@ impl NodeWorker {
     }
 
     pub async fn run(mut self) {
+        log::debug!("node worker event loop started");
         loop {
             select! {
                 event = self.swarm.next() => self.handle_event(event.expect("Swarm stream to be infinite.")).await,

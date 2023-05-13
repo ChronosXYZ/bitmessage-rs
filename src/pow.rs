@@ -15,7 +15,7 @@ pub enum PoWError {
 }
 
 /// Function to do PoW for sending messages into network
-pub(crate) fn do_pow(target: u64, initial_hash: Vec<u8>) -> (u64, u64) {
+pub(crate) async fn do_pow(target: u64, initial_hash: Vec<u8>) -> (u64, u64) {
     info!("PoW has started");
 
     let mut nonce: u64 = 0;

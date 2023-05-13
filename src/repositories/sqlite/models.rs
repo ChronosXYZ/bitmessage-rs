@@ -22,6 +22,7 @@ pub(crate) struct Object {
     pub nonce: Vec<u8>,
     pub data: Vec<u8>,
     pub expires: NaiveDateTime,
+    pub signature: Vec<u8>,
 }
 
 #[derive(Queryable, Insertable, Debug, PartialEq)]

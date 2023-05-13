@@ -58,8 +58,9 @@ impl InventoryRepository for SqliteInventoryRepository {
         Ok(Some(Object {
             hash: bs58::decode(&hash).into_vec().unwrap(),
             nonce,
-            ttl: model.expires.timestamp(),
+            expires: model.expires.timestamp(),
             kind,
+            signature: model.signature.clone(),
         }))
     }
 
@@ -92,7 +93,8 @@ impl InventoryRepository for SqliteInventoryRepository {
             nonce: o.nonce.to_le_bytes().to_vec(),
             object_type: o.kind.object_type() as i32,
             data,
-            expires: NaiveDateTime::from_timestamp_opt(o.ttl, 0).unwrap(),
+            expires: NaiveDateTime::from_timestamp_opt(o.expires, 0).unwrap(),
+            signature: o.signature,
         };
         diesel::insert_into(schema::inventory::table)
             .values(&model)

@@ -1,6 +1,6 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use sha2::Digest;
 
 pub type InventoryVector = Vec<String>;
 
@@ -29,7 +29,26 @@ pub struct Object {
     pub hash: Vec<u8>,
     pub nonce: u64,
     pub expires: i64,
+    pub signature: Vec<u8>,
     pub kind: ObjectKind,
+}
+
+impl Object {
+    pub fn new(expires: i64, signature: Vec<u8>, kind: ObjectKind) -> Self {
+        let mut hash_data: Vec<u8> = Vec::new();
+        hash_data.extend_from_slice(&expires.to_le_bytes()[..]);
+        hash_data.extend_from_slice(&signature);
+        hash_data.extend_from_slice(&serde_cbor::to_vec(&kind).unwrap()[..]);
+        let result = sha2::Sha256::digest(&hash_data);
+        let hash: &[u8] = result.as_ref();
+        Self {
+            hash: hash.to_vec(),
+            nonce: 0,
+            expires,
+            signature,
+            kind,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -73,7 +92,6 @@ pub struct UnencryptedMsg {
     pub destination_ripe: String,
     pub encoding: MsgEncoding,
     pub message: Vec<u8>,
-    pub signature: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -83,5 +101,4 @@ pub struct UnencryptedPubkey {
     pub public_encryption_key: Vec<u8>,
     pub nonce_trials_per_byte: u64,
     pub extra_bytes: u64,
-    pub signature: Vec<u8>,
 }

@@ -15,6 +15,7 @@ CREATE TABLE inventory (
     nonce BLOB NOT NULL,
     data BLOB NOT NULL,
     expires TIMESTAMP NOT NULL
+    signature BLOB NOT NULL,
 );
 
 CREATE TABLE messages (

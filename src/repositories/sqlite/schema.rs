@@ -18,6 +18,7 @@ diesel::table! {
         nonce -> Binary,
         data -> Binary,
         expires -> Timestamp,
+        signature -> Binary,
     }
 }
 
@@ -32,8 +33,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(
-    addresses,
-    inventory,
-    messages,
-);
+diesel::allow_tables_to_appear_in_same_query!(addresses, inventory, messages,);

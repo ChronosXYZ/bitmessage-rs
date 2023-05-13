@@ -13,7 +13,8 @@ use futures::{
 };
 use libp2p::{
     core::upgrade::Version,
-    gossipsub, identify, identity,
+    gossipsub::{self, Sha256Topic, Topic},
+    identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     noise,
     request_response::{self, ProtocolSupport},
@@ -23,9 +24,12 @@ use libp2p::{
 use log::{debug, info};
 
 use crate::{
-    network::behaviour::{
-        BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
-        BitmessageProtocolCodec, BitmessageResponse,
+    network::{
+        behaviour::{
+            BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
+            BitmessageProtocolCodec, BitmessageResponse,
+        },
+        messages,
     },
     repositories::sqlite::{
         address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
@@ -39,6 +43,7 @@ const IDENTIFY_PROTO_NAME: &str = "/bitmessage/id/1.0.0";
 const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/repositories/sqlite/migrations");
+const COMMON_PUBSUB_TOPIC: &'static str = "common";
 
 #[derive(Debug)]
 pub struct DbConnectionOpts {
@@ -81,6 +86,10 @@ pub enum WorkerCommand {
     GetPeerID {
         sender: oneshot::Sender<PeerId>,
     },
+    BroadcastMsgByPubSub {
+        sender: oneshot::Sender<Result<(), Box<dyn Error + Send>>>,
+        msg: messages::NetworkMessage,
+    },
 }
 
 pub struct NodeWorker {
@@ -90,13 +99,13 @@ pub struct NodeWorker {
     command_receiver: mpsc::Receiver<WorkerCommand>,
     pending_commands: Vec<WorkerCommand>,
     sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
+    common_topic: Sha256Topic,
 }
 
 impl NodeWorker {
     pub fn new(
-        command_receiver: mpsc::Receiver<WorkerCommand>,
         bootstrap_nodes: Option<Vec<Multiaddr>>,
-    ) -> NodeWorker {
+    ) -> (NodeWorker, mpsc::Sender<WorkerCommand>) {
         let local_key = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
         info!("Local peer id: {local_peer_id:?}");
@@ -180,19 +189,28 @@ impl NodeWorker {
         let conn = &mut pool.get().unwrap();
         conn.run_pending_migrations(MIGRATIONS)
             .expect("migrations won't fail");
+        let topic = Sha256Topic::new(COMMON_PUBSUB_TOPIC);
+        swarm.behaviour_mut().gossipsub.subscribe(&topic);
 
-        Self {
-            local_peer_id,
-            swarm,
-            handler: Handler::new(
-                Box::new(SqliteAddressRepository::new(pool.clone())),
-                Box::new(SqliteInventoryRepository::new(pool.clone())),
-                Box::new(SqliteMessageRepository::new(pool.clone())),
-            ),
-            command_receiver,
-            pending_commands: Vec::new(),
-            sqlite_connection_pool: pool,
-        }
+        let (sender, receiver) = mpsc::channel(0);
+
+        (
+            Self {
+                local_peer_id,
+                swarm,
+                handler: Handler::new(
+                    Box::new(SqliteAddressRepository::new(pool.clone())),
+                    Box::new(SqliteInventoryRepository::new(pool.clone())),
+                    Box::new(SqliteMessageRepository::new(pool.clone())),
+                    sender.clone(),
+                ),
+                command_receiver: receiver,
+                pending_commands: Vec::new(),
+                sqlite_connection_pool: pool,
+                common_topic: topic,
+            },
+            sender,
+        )
     }
 
     async fn handle_event(
@@ -261,9 +279,11 @@ impl NodeWorker {
         match command {
             WorkerCommand::StartListening { multiaddr, sender } => {
                 debug!("Starting listening to the network...");
-                let _ = match self.swarm.listen_on(multiaddr.clone()) {
-                    Ok(_) => sender.send(Ok(())),
-                    Err(e) => sender.send(Err(Box::new(e))),
+                match self.swarm.listen_on(multiaddr.clone()) {
+                    Ok(_) => sender.send(Ok(())).expect("Receiver not to be dropped"),
+                    Err(e) => sender
+                        .send(Err(Box::new(e)))
+                        .expect("Receiver not to be dropped"),
                 };
             }
             WorkerCommand::Dial { peer, sender } => todo!(),
@@ -279,6 +299,20 @@ impl NodeWorker {
             WorkerCommand::GetPeerID { sender } => sender
                 .send(self.local_peer_id)
                 .expect("Receiver not to be dropped"),
+            WorkerCommand::BroadcastMsgByPubSub { sender, msg } => {
+                let serialized_msg = serde_cbor::to_vec(&msg).unwrap();
+                let result = self
+                    .swarm
+                    .behaviour_mut()
+                    .gossipsub
+                    .publish(self.common_topic.clone(), serialized_msg);
+                match result {
+                    Ok(_) => sender.send(Ok(())).expect("receiver not to be dropped"),
+                    Err(e) => sender
+                        .send(Err(Box::new(e)))
+                        .expect("receiver not to be dropped"),
+                }
+            }
         };
     }
 

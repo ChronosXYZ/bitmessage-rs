@@ -18,6 +18,7 @@ use super::{
     schema::{self, inventory::dsl},
 };
 
+#[derive(Clone)]
 pub struct SqliteInventoryRepository {
     connection_pool: Pool<ConnectionManager<SqliteConnection>>,
 }

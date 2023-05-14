@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
-    FutureExt, SinkExt, StreamExt,
+    FutureExt, SinkExt,
 };
 
 use crate::{
@@ -22,78 +22,12 @@ use crate::{
 
 use super::worker::WorkerCommand;
 
-enum HandlerWorkerCommand {
-    NonceCalculated { obj: Object },
-}
-
-struct HandlerWorker {
-    inventory_repo: Arc<Mutex<Box<InventoryRepositorySync>>>,
-    worker_sender: mpsc::Sender<WorkerCommand>,
-    receiver: mpsc::Receiver<HandlerWorkerCommand>,
-}
-
-impl HandlerWorker {
-    fn new(
-        inventory_repo: Arc<Mutex<Box<InventoryRepositorySync>>>,
-        worker_sender: mpsc::Sender<WorkerCommand>,
-    ) -> (Self, mpsc::Sender<HandlerWorkerCommand>) {
-        let (sender, receiver) = mpsc::channel(0);
-        (
-            Self {
-                inventory_repo,
-                receiver,
-                worker_sender,
-            },
-            sender,
-        )
-    }
-
-    async fn run(mut self) {
-        log::debug!("handler worker event loop started");
-        loop {
-            match self.receiver.next().await {
-                Some(c) => match c {
-                    HandlerWorkerCommand::NonceCalculated { obj } => {
-                        let mut inv_repo = self.inventory_repo.lock().await;
-                        inv_repo
-                            .store_object(bs58::encode(&obj.hash).into_string(), obj)
-                            .await
-                            .expect("repo not to fail");
-
-                        let inventory = inv_repo.get().await.expect("repo not to fail");
-                        let msg = NetworkMessage {
-                            command: MessageCommand::Inv,
-                            payload: MessagePayload::Inv { inventory },
-                        };
-                        let (sender, receiver) = oneshot::channel();
-                        self.worker_sender
-                            .send(WorkerCommand::BroadcastMsgByPubSub { sender, msg })
-                            .await
-                            .expect("receiver not to be dropped");
-                        if let Err(e) = receiver.await.expect("receiver not to be dropped") {
-                            log::error!(
-                                "error occured while broadcasting message by pubsub: {:?}",
-                                e
-                            );
-                        }
-                    }
-                },
-                None => {
-                    log::debug!("Shutting down handler worker loop...");
-                    return;
-                }
-            }
-        }
-    }
-}
-
 pub struct Handler {
     address_repo: Box<AddressRepositorySync>,
     inventory_repo: Arc<Mutex<Box<InventoryRepositorySync>>>,
     message_repo: Box<MessageRepositorySync>,
     requested_objects: Vec<String>, // TODO periodically request missing object from every connection we have
     worker_event_sender: mpsc::Sender<WorkerCommand>,
-    handler_worker_sender: mpsc::Sender<HandlerWorkerCommand>,
 }
 
 impl Handler {
@@ -103,17 +37,12 @@ impl Handler {
         message_repo: Box<MessageRepositorySync>,
         worker_event_sender: mpsc::Sender<WorkerCommand>,
     ) -> Handler {
-        let inv_repo = Arc::new(Mutex::new(inventory_repo));
-        let (handler_worker, handler_worker_sender) =
-            HandlerWorker::new(Arc::clone(&inv_repo), worker_event_sender.clone());
-        task::spawn(handler_worker.run());
         Handler {
             address_repo,
-            inventory_repo: Arc::clone(&inv_repo),
+            inventory_repo: Arc::new(Mutex::new(inventory_repo)),
             message_repo,
             requested_objects: Vec::new(),
             worker_event_sender,
-            handler_worker_sender,
         }
     }
 
@@ -324,13 +253,13 @@ impl Handler {
                     pow::NETWORK_MIN_EXTRA_BYTES,
                 );
 
-                let mut sender = self.handler_worker_sender.clone();
+                let mut sender = self.worker_event_sender.clone();
                 task::spawn((move || async move {
                     pow::do_pow(target, obj.hash.clone())
                         .then(move |(_, nonce)| async move {
                             obj.nonce = nonce;
                             sender
-                                .send(HandlerWorkerCommand::NonceCalculated { obj })
+                                .send(WorkerCommand::NonceCalculated { obj })
                                 .await
                                 .expect("receiver not to be dropped");
                         })

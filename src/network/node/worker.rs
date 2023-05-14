@@ -13,7 +13,7 @@ use futures::{
 };
 use libp2p::{
     core::upgrade::Version,
-    gossipsub::{self, Sha256Topic},
+    gossipsub::{self, MessageId, PublishError, Sha256Topic},
     identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     noise,
@@ -29,11 +29,14 @@ use crate::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
             BitmessageProtocolCodec, BitmessageResponse,
         },
-        messages,
+        messages::{self, MessageCommand, MessagePayload},
     },
-    repositories::sqlite::{
-        address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
-        message::SqliteMessageRepository,
+    repositories::{
+        inventory::InventoryRepositorySync,
+        sqlite::{
+            address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
+            message::SqliteMessageRepository,
+        },
     },
 };
 
@@ -90,6 +93,9 @@ pub enum WorkerCommand {
         sender: oneshot::Sender<Result<(), Box<dyn Error + Send>>>,
         msg: messages::NetworkMessage,
     },
+    NonceCalculated {
+        obj: messages::Object,
+    },
 }
 
 pub struct NodeWorker {
@@ -100,6 +106,7 @@ pub struct NodeWorker {
     pending_commands: Vec<WorkerCommand>,
     sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
     common_topic: Sha256Topic,
+    inventory_repo: Box<InventoryRepositorySync>,
 }
 
 impl NodeWorker {
@@ -197,14 +204,14 @@ impl NodeWorker {
             .expect("subscription not to fail");
 
         let (sender, receiver) = mpsc::channel(0);
-
+        let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         (
             Self {
                 local_peer_id,
                 swarm,
                 handler: Handler::new(
                     Box::new(SqliteAddressRepository::new(pool.clone())),
-                    Box::new(SqliteInventoryRepository::new(pool.clone())),
+                    inventory_repo.clone(),
                     Box::new(SqliteMessageRepository::new(pool.clone())),
                     sender.clone(),
                 ),
@@ -212,6 +219,7 @@ impl NodeWorker {
                 pending_commands: Vec::new(),
                 sqlite_connection_pool: pool,
                 common_topic: topic,
+                inventory_repo: inventory_repo.clone(),
             },
             sender,
         )
@@ -303,21 +311,35 @@ impl NodeWorker {
             WorkerCommand::GetPeerID { sender } => sender
                 .send(self.local_peer_id)
                 .expect("Receiver not to be dropped"),
-            WorkerCommand::BroadcastMsgByPubSub { sender, msg } => {
-                let serialized_msg = serde_cbor::to_vec(&msg).unwrap();
-                let result = self
-                    .swarm
-                    .behaviour_mut()
-                    .gossipsub
-                    .publish(self.common_topic.clone(), serialized_msg);
-                match result {
-                    Ok(_) => sender.send(Ok(())).expect("receiver not to be dropped"),
-                    Err(e) => sender
-                        .send(Err(Box::new(e)))
-                        .expect("receiver not to be dropped"),
-                }
+            WorkerCommand::BroadcastMsgByPubSub { sender, msg } => match self.publish_pubsub(msg) {
+                Ok(_) => sender.send(Ok(())).expect("receiver not to be dropped"),
+                Err(e) => sender
+                    .send(Err(Box::new(e)))
+                    .expect("receiver not to be dropped"),
+            },
+            WorkerCommand::NonceCalculated { obj } => {
+                self.inventory_repo
+                    .store_object(bs58::encode(&obj.hash).into_string(), obj)
+                    .await
+                    .expect("repo not to fail");
+
+                let inventory = self.inventory_repo.get().await.expect("repo not to fail");
+                let msg = messages::NetworkMessage {
+                    command: MessageCommand::Inv,
+                    payload: MessagePayload::Inv { inventory },
+                };
+                self.publish_pubsub(msg)
+                    .expect("pubsub publish not to fail");
             }
         };
+    }
+
+    fn publish_pubsub(&mut self, msg: messages::NetworkMessage) -> Result<MessageId, PublishError> {
+        let serialized_msg = serde_cbor::to_vec(&msg).unwrap();
+        self.swarm
+            .behaviour_mut()
+            .gossipsub
+            .publish(self.common_topic.clone(), serialized_msg)
     }
 
     pub async fn run(mut self) {

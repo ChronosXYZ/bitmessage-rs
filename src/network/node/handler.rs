@@ -142,14 +142,18 @@ impl Handler {
             self.offer_inv().await.expect("inv msg to be published");
 
             let handler_result = match &obj.kind {
-                ObjectKind::Msg { encrypted } => self.handle_msg_object(obj.clone()).await,
-                ObjectKind::Broadcast { tag, encrypted } => {
-                    Err("we don't support broadcast at the moment, skipping it...".into())
+                ObjectKind::Msg { encrypted: _ } => self.handle_msg_object(obj.clone()).await,
+                ObjectKind::Broadcast {
+                    tag: _,
+                    encrypted: _,
+                } => Err("we don't support broadcast at the moment, skipping it...".into()),
+                ObjectKind::Getpubkey { tag: _ } => {
+                    self.handle_get_pubkey_object(obj.clone()).await
                 }
-                ObjectKind::Getpubkey { tag } => self.handle_get_pubkey_object(obj.clone()).await,
-                ObjectKind::Pubkey { tag, encrypted } => {
-                    self.handle_pubkey_object(obj.clone()).await
-                }
+                ObjectKind::Pubkey {
+                    tag: _,
+                    encrypted: _,
+                } => self.handle_pubkey_object(obj.clone()).await,
             };
             if let Err(r) = handler_result {
                 log::error!("{:?}", r.to_string());

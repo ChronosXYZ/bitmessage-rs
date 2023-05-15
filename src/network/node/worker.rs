@@ -16,7 +16,7 @@ use libp2p::{
     gossipsub::{self, MessageId, PublishError, Sha256Topic},
     identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
-    noise,
+    mdns, noise,
     request_response::{self, ProtocolSupport},
     swarm::{derive_prelude::Either, ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Swarm, Transport,
@@ -149,6 +149,8 @@ impl NodeWorker {
                     IDENTIFY_PROTO_NAME.to_string(),
                     local_key.public(),
                 )),
+                mdns: mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)
+                    .unwrap(),
             },
             local_peer_id,
         )
@@ -230,8 +232,11 @@ impl NodeWorker {
         event: SwarmEvent<
             BitmessageBehaviourEvent,
             Either<
-                Either<Either<void::Void, io::Error>, io::Error>,
-                ConnectionHandlerUpgrErr<io::Error>,
+                Either<
+                    Either<Either<void::Void, io::Error>, io::Error>,
+                    ConnectionHandlerUpgrErr<io::Error>,
+                >,
+                void::Void,
             >,
         >,
     ) {
@@ -282,6 +287,17 @@ impl NodeWorker {
             },
             SwarmEvent::Behaviour(BitmessageBehaviourEvent::Identify(e)) => {
                 self.handle_identify_event(e)
+            }
+            SwarmEvent::Behaviour(BitmessageBehaviourEvent::Mdns(mdns::Event::Discovered(
+                list,
+            ))) => {
+                for (peer_id, multiaddr) in list {
+                    log::debug!("Found new peer via mDNS: {:?}/{:?}", multiaddr, peer_id);
+                    self.swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .add_address(&peer_id, multiaddr);
+                }
             }
             _ => {}
         }
@@ -346,7 +362,7 @@ impl NodeWorker {
         log::debug!("node worker event loop started");
         loop {
             select! {
-                event = self.swarm.next() => self.handle_event(event.expect("Swarm stream to be infinite.")).await,
+                event = self.swarm.select_next_some() => self.handle_event(event).await,
                 command = self.command_receiver.next() => match command {
                     Some(c) => self.handle_command(c).await,
                     // Command channel closed, thus shutting down the network event loop.

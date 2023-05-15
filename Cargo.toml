@@ -18,7 +18,7 @@ ecies = "0.2.3"
 erased-serde = "0.3.25"
 futures = "0.3.28"
 hmac-sha512 = "1.1.4"
-libp2p = { version = "0.51.3", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux", "gossipsub", "request-response", "kad", "identify"] }
+libp2p = { version = "0.51.3", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux", "gossipsub", "request-response", "kad", "identify", "mdns"] }
 libsecp256k1 = "0.7.1"
 log = "0.4.17"
 multiaddr = "0.17.1"

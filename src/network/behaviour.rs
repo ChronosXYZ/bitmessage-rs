@@ -6,6 +6,7 @@ use libp2p::{
     core::upgrade::{read_length_prefixed, write_length_prefixed},
     gossipsub, identify,
     kad::{record::store::MemoryStore, Kademlia, KademliaEvent},
+    mdns,
     request_response::{self, Codec, ProtocolName},
     swarm::NetworkBehaviour,
 };
@@ -132,6 +133,7 @@ pub struct BitmessageNetBehaviour {
     pub identify: identify::Behaviour,
     pub kademlia: Kademlia<MemoryStore>,
     pub rpc: request_response::Behaviour<BitmessageProtocolCodec>,
+    pub mdns: mdns::async_io::Behaviour,
 }
 
 #[derive(Debug)]
@@ -140,6 +142,7 @@ pub enum BitmessageBehaviourEvent {
     Kademlia(KademliaEvent),
     Identify(identify::Event),
     Gossipsub(gossipsub::Event),
+    Mdns(mdns::Event),
 }
 
 impl From<request_response::Event<BitmessageRequest, BitmessageResponse>>
@@ -165,5 +168,11 @@ impl From<identify::Event> for BitmessageBehaviourEvent {
 impl From<gossipsub::Event> for BitmessageBehaviourEvent {
     fn from(value: gossipsub::Event) -> Self {
         BitmessageBehaviourEvent::Gossipsub(value)
+    }
+}
+
+impl From<mdns::Event> for BitmessageBehaviourEvent {
+    fn from(value: mdns::Event) -> Self {
+        BitmessageBehaviourEvent::Mdns(value)
     }
 }

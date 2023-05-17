@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use chrono::Utc;
 use hmac_sha512::Hash;
 use log::info;

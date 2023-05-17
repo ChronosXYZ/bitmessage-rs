@@ -16,10 +16,10 @@ pub enum ObjectKind {
 impl ObjectKind {
     pub fn object_type(&self) -> u8 {
         match self {
-            ObjectKind::Msg { encrypted } => 0,
-            ObjectKind::Broadcast { tag, encrypted } => 1,
-            ObjectKind::Getpubkey { tag } => 2,
-            ObjectKind::Pubkey { tag, encrypted } => 3,
+            ObjectKind::Msg { .. } => 0,
+            ObjectKind::Broadcast { .. } => 1,
+            ObjectKind::Getpubkey { .. } => 2,
+            ObjectKind::Pubkey { .. } => 3,
         }
     }
 }

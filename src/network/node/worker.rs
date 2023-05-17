@@ -1,4 +1,4 @@
-use std::{borrow::Cow, error::Error, io, iter, time::Duration};
+use std::{borrow::Cow, error::Error, fs, io, iter, time::Duration};
 
 use diesel::{
     connection::SimpleConnection,
@@ -7,6 +7,7 @@ use diesel::{
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
+use directories::ProjectDirs;
 use futures::{
     channel::{mpsc, oneshot},
     select, StreamExt,
@@ -176,11 +177,12 @@ impl NodeWorker {
                 .unwrap();
         }
 
-        let dirs = xdg::BaseDirectories::with_prefix("bitmessage-rs").unwrap();
-        let mut db_url = dirs.create_data_directory("db").unwrap();
-        db_url.push("db");
-        db_url.set_file_name("database");
-        db_url.set_extension("db");
+        let dirs = ProjectDirs::from("", "", "bitmessage-rs").unwrap();
+        let data_dir = dirs.data_dir();
+        let data_dir_buf = data_dir.join("db");
+        fs::create_dir_all(&data_dir_buf).expect("db folder is created");
+        let db_url = data_dir_buf.join("database.db");
+
         debug!("{:?}", db_url.to_str().unwrap());
 
         let pool = Pool::builder()

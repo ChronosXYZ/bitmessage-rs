@@ -1,11 +1,14 @@
 use async_std::task;
+use relm4::gtk::prelude::*;
 use relm4::{
+    adw,
     gtk::{
         self,
-        traits::{BoxExt, GtkWindowExt, OrientableExt},
+        traits::{BoxExt, GtkWindowExt, OrientableExt, WidgetExt},
     },
     view, ComponentParts, RelmApp, RelmWidgetExt, SimpleComponent,
 };
+use relm4_icons::icon_name;
 
 mod network;
 mod pow;
@@ -23,20 +26,77 @@ impl SimpleComponent for App {
     type Init = ();
 
     view! {
-        gtk::ApplicationWindow {
-            set_default_size: (300, 100),
+        adw::ApplicationWindow {
+            set_default_size: (400, 300),
 
             set_title = Some("Bitmessage-rs"),
 
-            #[wrap(Some)]
-            set_titlebar = &gtk::HeaderBar {},
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
-                set_margin_all: 5,
 
-                gtk::Label {
-                    set_label: "Hello, World!",
+                adw::HeaderBar {
+                    set_centering_policy: adw::CenteringPolicy::Strict,
+
+                    #[wrap(Some)]
+                    #[name="view_title"]
+                    set_title_widget = &adw::ViewSwitcherTitle {
+                        set_stack: Some(&stack),
+                        set_title: "Bitmessage-rs"
+                    }
+                },
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_vexpand: true,
+
+                    #[name="stack"]
+                    adw::ViewStack {
+                        set_vexpand: true,
+                        set_margin_start: 12,
+                        set_margin_end: 12,
+
+                        add_titled[Some("identities"), "Identities"] = &gtk::ScrolledWindow {
+                            gtk::CenterBox {
+                                #[wrap(Some)]
+                                set_center_widget = &gtk::Label {
+                                    set_label: "No identities yet :(",
+                                    add_css_class: "large-title"
+                                }
+                            }
+                        } -> {
+                            set_icon_name: Some(icon_name::PERSON),
+                        },
+
+                        add_titled[Some("messages"), "Messages"] = &gtk::ScrolledWindow {
+                            gtk::CenterBox {
+                                #[wrap(Some)]
+                                set_center_widget = &gtk::Label {
+                                    set_label: "No messages yet :(",
+                                    add_css_class: "large-title"
+                                }
+                            }
+                        } -> {
+                            set_icon_name: Some(icon_name::MAIL_INBOX_FILLED),
+                        },
+
+                        add_titled[Some("status"), "Network Status"] = &gtk::ScrolledWindow {
+                            gtk::CenterBox {
+                                #[wrap(Some)]
+                                set_center_widget = &gtk::Label {
+                                    set_label: "No network status yet :(",
+                                    add_css_class: "large-title"
+                                }
+                            }
+                        } -> {
+                            set_icon_name: Some(icon_name::DESKTOP_PULSE_FILLED),
+                        },
+                    },
+
+                    #[name = "view_bar"]
+                    adw::ViewSwitcherBar {
+                        set_stack: Some(&stack),
+                    }
                 }
             }
         }
@@ -50,6 +110,11 @@ impl SimpleComponent for App {
         let model = App {};
 
         let widgets = view_output!();
+
+        widgets
+            .view_title
+            .bind_property("title-visible", &widgets.view_bar, "reveal")
+            .build();
 
         ComponentParts { model, widgets }
     }
@@ -66,5 +131,6 @@ fn main() {
         .expect("listening not to fail");
 
     let app = RelmApp::new("io.github.chronosx88.BitmessageRs");
+    relm4_icons::initialize_icons();
     app.run::<App>(());
 }

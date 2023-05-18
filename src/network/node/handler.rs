@@ -294,7 +294,11 @@ impl Handler {
                 match serde_cbor::from_slice(msg.as_slice()) {
                     Ok(msg) => {
                         self.message_repo
-                            .save(bs58::encode(&object.hash).into_string(), msg)
+                            .save(
+                                bs58::encode(&object.hash).into_string(),
+                                msg,
+                                object.signature.clone(),
+                            )
                             .await
                             .expect("repo not to fail");
                     }

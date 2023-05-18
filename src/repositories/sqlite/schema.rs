@@ -8,6 +8,7 @@ diesel::table! {
         public_encryption_key -> Nullable<Binary>,
         private_signing_key -> Nullable<Binary>,
         private_encryption_key -> Nullable<Binary>,
+        label -> Nullable<Text>,
     }
 }
 
@@ -30,7 +31,12 @@ diesel::table! {
         data -> Binary,
         created_at -> Timestamp,
         status -> Text,
+        signature -> Binary,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(addresses, inventory, messages,);
+diesel::allow_tables_to_appear_in_same_query!(
+    addresses,
+    inventory,
+    messages,
+);

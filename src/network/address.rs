@@ -2,8 +2,9 @@ use ecies::{PublicKey, SecretKey};
 use hmac_sha512::Hash;
 use ripemd::{Digest, Ripemd160};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Address {
+    pub label: String,
     pub ripe: Vec<u8>,
     pub string_repr: String,
     pub tag: Vec<u8>,
@@ -23,6 +24,7 @@ impl Address {
         // FIXME make checksum of ripe
         let string_repr = bs58::encode(&ripe).into_string();
         Address {
+            label: "".to_string(),
             ripe,
             tag,
             public_decryption_key,

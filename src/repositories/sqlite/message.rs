@@ -29,7 +29,12 @@ impl SqliteMessageRepository {
 #[async_trait]
 impl MessageRepository for SqliteMessageRepository {
     /// Save message in repository
-    async fn save(&mut self, hash: String, msg: UnencryptedMsg) -> Result<(), Box<dyn Error>> {
+    async fn save(
+        &mut self,
+        hash: String,
+        msg: UnencryptedMsg,
+        signature: Vec<u8>,
+    ) -> Result<(), Box<dyn Error>> {
         let mut conn = self.connection_pool.get().unwrap();
 
         let model = models::Message {
@@ -39,6 +44,7 @@ impl MessageRepository for SqliteMessageRepository {
             data: msg.message,
             created_at: Utc::now().naive_utc(),
             status: "unknown".to_string(), // FIXME
+            signature,
         };
         diesel::insert_into(schema::messages::table)
             .values(&model)

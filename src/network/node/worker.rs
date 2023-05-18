@@ -26,6 +26,7 @@ use log::{debug, info};
 
 use crate::{
     network::{
+        address::Address,
         behaviour::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
             BitmessageProtocolCodec, BitmessageResponse,
@@ -33,6 +34,7 @@ use crate::{
         messages::{self, MessageCommand, MessagePayload},
     },
     repositories::{
+        address::AddressRepositorySync,
         inventory::InventoryRepositorySync,
         sqlite::{
             address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
@@ -97,6 +99,9 @@ pub enum WorkerCommand {
     NonceCalculated {
         obj: messages::Object,
     },
+    GetOwnIdentities {
+        sender: oneshot::Sender<Result<Vec<Address>, Box<dyn Error + Send + Sync>>>,
+    },
 }
 
 pub struct NodeWorker {
@@ -107,7 +112,9 @@ pub struct NodeWorker {
     pending_commands: Vec<WorkerCommand>,
     sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
     common_topic: Sha256Topic,
+
     inventory_repo: Box<InventoryRepositorySync>,
+    address_repo: Box<AddressRepositorySync>,
 }
 
 impl NodeWorker {
@@ -209,12 +216,13 @@ impl NodeWorker {
 
         let (sender, receiver) = mpsc::channel(0);
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
+        let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));
         (
             Self {
                 local_peer_id,
                 swarm,
                 handler: Handler::new(
-                    Box::new(SqliteAddressRepository::new(pool.clone())),
+                    address_repo.clone(),
                     inventory_repo.clone(),
                     Box::new(SqliteMessageRepository::new(pool.clone())),
                     sender.clone(),
@@ -223,6 +231,8 @@ impl NodeWorker {
                 pending_commands: Vec::new(),
                 sqlite_connection_pool: pool,
                 common_topic: topic,
+
+                address_repo: address_repo.clone(),
                 inventory_repo: inventory_repo.clone(),
             },
             sender,
@@ -348,6 +358,20 @@ impl NodeWorker {
                 };
                 self.publish_pubsub(msg)
                     .expect("pubsub publish not to fail");
+            }
+            WorkerCommand::GetOwnIdentities { sender } => {
+                let result = self.address_repo.get_identities().await;
+                match result {
+                    Ok(a) => {
+                        sender.send(Ok(a)).expect("receiver not to be dropped");
+                    }
+                    Err(e) => {
+                        sender
+                            .send(Err(Box::from(e.to_string())))
+                            .expect("receiver not to be dropped");
+                        return;
+                    }
+                }
             }
         };
     }

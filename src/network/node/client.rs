@@ -6,6 +6,8 @@ use futures::{
 };
 use libp2p::{Multiaddr, PeerId};
 
+use crate::network::address::Address;
+
 use super::worker::WorkerCommand;
 
 pub struct NodeClient {
@@ -49,5 +51,14 @@ impl NodeClient {
 
     pub fn shutdown(&mut self) {
         self.sender.close_channel();
+    }
+
+    pub async fn get_own_identities(&mut self) -> Vec<Address> {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(WorkerCommand::GetOwnIdentities { sender })
+            .await
+            .expect("Receiver not to be dropped");
+        receiver.await.expect("Sender not to be dropped").unwrap()
     }
 }

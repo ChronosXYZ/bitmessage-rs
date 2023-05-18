@@ -1,6 +1,8 @@
 use crate::ui::app::AppModel;
 use async_std::task;
+use futures::lock::Mutex;
 use relm4::RelmApp;
+use ui::state;
 
 mod network;
 mod pow;
@@ -16,6 +18,8 @@ fn main() {
 
     task::block_on(client.start_listening("/ip4/0.0.0.0/tcp/0".parse().unwrap()))
         .expect("listening not to fail");
+
+    state::STATE.write_inner().client = Some(client);
 
     let app = RelmApp::new("io.github.chronosx88.BitmessageRs");
     relm4_icons::initialize_icons();

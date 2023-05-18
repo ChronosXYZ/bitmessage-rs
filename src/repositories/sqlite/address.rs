@@ -15,6 +15,7 @@ use super::{
     schema::{self, addresses::dsl},
 };
 
+#[derive(Clone)]
 pub struct SqliteAddressRepository {
     connection_pool: Pool<ConnectionManager<SqliteConnection>>,
 }
@@ -50,6 +51,11 @@ impl SqliteAddressRepository {
             private_signing_key: priv_sig_key_ser,
             public_encryption_key: pub_enc_key_ser,
             private_encryption_key: priv_enc_key_ser,
+            label: if a.label.is_empty() {
+                None
+            } else {
+                Some(a.label)
+            },
         }
     }
 
@@ -76,6 +82,7 @@ impl SqliteAddressRepository {
         address.private_signing_key = ppsk;
         address.public_encryption_key = pek;
         address.private_encryption_key = ppek;
+        address.label = m.label.clone().unwrap_or("".to_string());
         Ok(address)
     }
 }

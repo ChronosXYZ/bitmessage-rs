@@ -12,6 +12,7 @@ pub(crate) struct Address {
     pub public_signing_key: Option<Vec<u8>>,
     pub private_signing_key: Option<Vec<u8>>,
     pub private_encryption_key: Option<Vec<u8>>,
+    pub label: Option<String>,
 }
 
 #[derive(Queryable, Insertable, Debug, PartialEq)]
@@ -34,4 +35,5 @@ pub struct Message {
     pub data: Vec<u8>,
     pub created_at: NaiveDateTime,
     pub status: String,
+    pub signature: Vec<u8>,
 }

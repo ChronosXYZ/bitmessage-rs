@@ -36,3 +36,6 @@ relm4-components = "0.6.0-beta.1"
 relm4-icons = { version = "0.6.0-beta.6", features = ["person", "mail-inbox-filled", "desktop-pulse-filled", "plus", "pencil-and-paper", "x-circular", "edit"] }
 directories = "5.0.1"
 rand = { version = "0.8.5", features = ["getrandom"] }
+identicon-rs = "4.0.1"
+adw = { package = "libadwaita", version = "0.3.0", features = ["gtk_v4_6", "v1_3"] }
+gtk = { package = "gtk4",version = "0.6.6", features = ["v4_10"] }

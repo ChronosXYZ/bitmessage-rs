@@ -19,6 +19,7 @@ fn main() {
         .expect("listening not to fail");
 
     state::STATE.write_inner().client = Some(client);
+    relm4::RELM_THREADS.set(4).unwrap();
 
     let app = RelmApp::new("io.github.chronosx88.BitmessageRs");
     relm4_icons::initialize_icons();

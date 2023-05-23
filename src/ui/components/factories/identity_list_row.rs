@@ -1,12 +1,9 @@
+use adw::traits::{ActionRowExt, PreferencesRowExt};
+use gtk::{
+    gdk, glib,
+    traits::{ButtonExt, ListBoxRowExt, WidgetExt},
+};
 use relm4::{
-    adw::{
-        self,
-        traits::{ActionRowExt, PreferencesRowExt},
-    },
-    gtk::{
-        self,
-        traits::{ButtonExt, ListBoxRowExt, WidgetExt},
-    },
     prelude::{DynamicIndex, FactoryComponent},
     FactorySender,
 };
@@ -17,6 +14,7 @@ use crate::ui::components::identities_list::IdentitiesListInput;
 pub struct IdentityListRow {
     pub label: String,
     pub address: String,
+    identity_avatar: gtk::Image,
 }
 
 pub struct IdentityListRowInit {
@@ -30,12 +28,22 @@ pub enum IdentityListRowOutput {
     RenameIdentity(DynamicIndex),
 }
 
+#[derive(Debug)]
+pub enum IdentityListRowCommand {
+    LoadIdenticon(gdk::Texture),
+}
+
+#[derive(Debug)]
+pub enum IdentityListRowInput {
+    RenameLabel(String),
+}
+
 #[relm4::factory(pub)]
 impl FactoryComponent for IdentityListRow {
     type Init = IdentityListRowInit;
-    type Input = ();
+    type Input = IdentityListRowInput;
     type Output = IdentityListRowOutput;
-    type CommandOutput = ();
+    type CommandOutput = IdentityListRowCommand;
     type ParentInput = IdentitiesListInput;
     type ParentWidget = gtk::ListBox;
 
@@ -44,8 +52,12 @@ impl FactoryComponent for IdentityListRow {
         adw::ActionRow {
             set_selectable: false,
             set_activatable: false,
+            #[watch]
             set_title: &self.label.to_string(),
             set_subtitle: &self.address.to_string(),
+
+            #[name(identity_avatar)]
+            add_prefix = &gtk::Image {},
 
             add_suffix = &gtk::Button {
                 set_icon_name: icon_name::EDIT,
@@ -70,7 +82,29 @@ impl FactoryComponent for IdentityListRow {
         Self {
             label: init.label,
             address: init.address,
+            identity_avatar: gtk::Image::default(),
         }
+    }
+
+    fn init_widgets(
+        &mut self,
+        index: &Self::Index,
+        root: &Self::Root,
+        returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+
+        self.identity_avatar = widgets.identity_avatar.clone();
+        let address = self.address.clone();
+        sender.oneshot_command(async move {
+            let png_data = identicon_rs::new(address).export_png_data().unwrap();
+            let texture =
+                gdk::Texture::from_bytes(&glib::Bytes::from(png_data.as_slice())).unwrap();
+            IdentityListRowCommand::LoadIdenticon(texture)
+        });
+
+        widgets
     }
 
     fn forward_to_parent(output: Self::Output) -> Option<Self::ParentInput> {
@@ -80,5 +114,21 @@ impl FactoryComponent for IdentityListRow {
                 IdentitiesListInput::HandleRenameIdentity(i)
             }
         })
+    }
+
+    fn update_cmd(&mut self, message: Self::CommandOutput, _sender: FactorySender<Self>) {
+        match message {
+            IdentityListRowCommand::LoadIdenticon(texture) => {
+                self.identity_avatar.set_paintable(Some(&texture));
+            }
+        }
+    }
+
+    fn update(&mut self, message: Self::Input, sender: FactorySender<Self>) {
+        match message {
+            IdentityListRowInput::RenameLabel(new_label) => {
+                self.label = new_label;
+            }
+        }
     }
 }

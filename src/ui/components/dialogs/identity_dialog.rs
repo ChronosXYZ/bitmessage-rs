@@ -1,8 +1,6 @@
-use relm4::{
-    adw,
-    gtk::{self, prelude::*},
-    Component, ComponentParts, ComponentSender, RelmWidgetExt,
-};
+use adw;
+use gtk::{self, prelude::*};
+use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
 use relm4_icons::icon_name;
 
 pub struct IdentityDialogModel {
@@ -10,11 +8,13 @@ pub struct IdentityDialogModel {
     pub mode: IdentityDialogMode,
     pub button_label: String,
     pub address: String,
+    pub index: Option<usize>,
 }
 
 pub struct IdentityDialogInit {
     pub label: String,
     pub address: String,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,11 @@ pub enum IdentityDialogInput {
 #[derive(Debug)]
 pub enum IdentityDialogOutput {
     GenerateIdentity(String),
-    RenameIdentity { new_label: String, address: String },
+    RenameIdentity {
+        new_label: String,
+        address: String,
+        index: usize,
+    },
 }
 
 #[relm4::component(pub)]
@@ -105,6 +109,7 @@ impl Component for IdentityDialogModel {
                 mode: IdentityDialogMode::Edit,
                 button_label: "Rename identity".to_string(),
                 address: name.address,
+                index: Some(name.index),
             }
         } else {
             IdentityDialogModel {
@@ -112,6 +117,7 @@ impl Component for IdentityDialogModel {
                 mode: IdentityDialogMode::New,
                 button_label: "Create new identity".to_string(),
                 address: "".to_string(),
+                index: None,
             }
         };
 
@@ -136,6 +142,7 @@ impl Component for IdentityDialogModel {
                             .output(IdentityDialogOutput::RenameIdentity {
                                 new_label: name.to_string(),
                                 address: self.address.clone(),
+                                index: self.index.unwrap(),
                             })
                             .unwrap_or_default();
                     }

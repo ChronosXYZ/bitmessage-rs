@@ -1,9 +1,8 @@
+use gtk::{self, prelude::*};
 use relm4::factory::FactoryVecDeque;
-use relm4::gtk::prelude::*;
 use relm4::prelude::DynamicIndex;
 use relm4::{
     component::{AsyncComponent, AsyncComponentParts},
-    gtk,
     loading_widgets::LoadingWidgets,
     view,
 };
@@ -14,7 +13,9 @@ use crate::ui::components::dialogs::identity_dialog::IdentityDialogOutput;
 use crate::ui::state;
 
 use super::dialogs::identity_dialog::{IdentityDialogInit, IdentityDialogModel};
-use super::factories::identity_list_row::{IdentityListRow, IdentityListRowInit};
+use super::factories::identity_list_row::{
+    IdentityListRow, IdentityListRowInit, IdentityListRowInput,
+};
 
 //#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 //struct IdentityItem {
@@ -70,10 +71,16 @@ pub(crate) struct IdentitiesListModel {
 #[derive(Debug)]
 pub enum IdentitiesListInput {
     HandleCreateNewIdentity,
-    GenerateNewIdentity { label: String },
+    GenerateNewIdentity {
+        label: String,
+    },
     DeleteIdentity(DynamicIndex),
     HandleRenameIdentity(DynamicIndex),
-    RenameIdentity { new_label: String, address: String },
+    RenameIdentity {
+        new_label: String,
+        address: String,
+        index: usize,
+    },
 }
 
 #[derive(Debug)]
@@ -121,9 +128,15 @@ impl IdentitiesListModel {
                 IdentityDialogOutput::GenerateIdentity(label) => {
                     IdentitiesListInput::GenerateNewIdentity { label }
                 }
-                IdentityDialogOutput::RenameIdentity { new_label, address } => {
-                    IdentitiesListInput::RenameIdentity { new_label, address }
-                }
+                IdentityDialogOutput::RenameIdentity {
+                    new_label,
+                    address,
+                    index,
+                } => IdentitiesListInput::RenameIdentity {
+                    new_label,
+                    address,
+                    index,
+                },
             })
     }
 }
@@ -233,14 +246,16 @@ impl AsyncComponent for IdentitiesListModel {
                 self.identity_dialog.widget().present();
             }
             IdentitiesListInput::GenerateNewIdentity { label } => {
-                state::STATE
+                let address = state::STATE
                     .write_inner()
                     .client
                     .as_mut()
                     .unwrap()
-                    .generate_new_identity(label)
+                    .generate_new_identity(label.clone())
                     .await;
-                self.reload_list(sender.clone()).await;
+                self.list_view
+                    .guard()
+                    .push_back(IdentityListRowInit { label, address });
             }
             IdentitiesListInput::DeleteIdentity(i) => {
                 let item = self
@@ -255,7 +270,6 @@ impl AsyncComponent for IdentitiesListModel {
                     .unwrap()
                     .delete_identity(item.address)
                     .await;
-                self.reload_list(sender.clone()).await;
             }
             IdentitiesListInput::HandleRenameIdentity(i) => {
                 let guard = self.list_view.guard();
@@ -268,19 +282,25 @@ impl AsyncComponent for IdentitiesListModel {
                     Some(IdentityDialogInit {
                         label: identity_item.label.clone(),
                         address: identity_item.address.clone(),
+                        index: i.current_index(),
                     }),
                 );
                 self.identity_dialog.widget().present();
             }
-            IdentitiesListInput::RenameIdentity { new_label, address } => {
+            IdentitiesListInput::RenameIdentity {
+                new_label,
+                address,
+                index,
+            } => {
                 state::STATE
                     .write_inner()
                     .client
                     .as_mut()
                     .unwrap()
-                    .rename_identity(address, new_label)
+                    .rename_identity(address, new_label.clone())
                     .await;
-                self.reload_list(sender.clone()).await;
+                self.list_view
+                    .send(index, IdentityListRowInput::RenameLabel(new_label));
             }
         }
     }

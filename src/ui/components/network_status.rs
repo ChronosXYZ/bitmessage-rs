@@ -1,8 +1,7 @@
-use relm4::gtk::prelude::*;
+use gtk::{self, prelude::*};
 use relm4::RelmWidgetExt;
 use relm4::{
     component::{AsyncComponent, AsyncComponentParts},
-    gtk,
     loading_widgets::LoadingWidgets,
     view,
 };
@@ -54,9 +53,9 @@ impl AsyncComponent for NetworkStatusModel {
     }
 
     async fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
-        sender: relm4::AsyncComponentSender<Self>,
+        _sender: relm4::AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
         let model = Self {};
         let widgets = view_output!();

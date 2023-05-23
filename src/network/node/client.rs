@@ -62,7 +62,7 @@ impl NodeClient {
         receiver.await.expect("Sender not to be dropped").unwrap()
     }
 
-    pub async fn generate_new_identity(&mut self, label: String) {
+    pub async fn generate_new_identity(&mut self, label: String) -> String {
         let (sender, receiver) = oneshot::channel();
         self.sender
             .send(WorkerCommand::GenerateIdentity { label, sender })

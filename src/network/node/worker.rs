@@ -106,7 +106,7 @@ pub enum WorkerCommand {
     },
     GenerateIdentity {
         label: String,
-        sender: oneshot::Sender<Result<(), DynError>>,
+        sender: oneshot::Sender<Result<String, DynError>>,
     },
     RenameIdentity {
         new_label: String,
@@ -125,7 +125,7 @@ pub struct NodeWorker {
     handler: Handler,
     command_receiver: mpsc::Receiver<WorkerCommand>,
     pending_commands: Vec<WorkerCommand>,
-    sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
+    _sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
     common_topic: Sha256Topic,
 
     inventory_repo: Box<InventoryRepositorySync>,
@@ -244,7 +244,7 @@ impl NodeWorker {
                 ),
                 command_receiver: receiver,
                 pending_commands: Vec::new(),
-                sqlite_connection_pool: pool,
+                _sqlite_connection_pool: pool,
                 common_topic: topic,
 
                 address_repo: address_repo.clone(),
@@ -391,10 +391,12 @@ impl NodeWorker {
             WorkerCommand::GenerateIdentity { label, sender } => {
                 let mut address = Address::generate();
                 address.label = label;
-                let res = self.address_repo.store(address).await;
+                let res = self.address_repo.store(address.clone()).await;
                 match res {
                     Ok(_) => {
-                        sender.send(Ok(())).expect("receiver not to be dropped");
+                        sender
+                            .send(Ok(address.string_repr))
+                            .expect("receiver not to be dropped");
                     }
                     Err(e) => sender
                         .send(Err(Box::from(e.to_string())))

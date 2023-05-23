@@ -1,5 +1,6 @@
 use ecies::{PublicKey, SecretKey};
 use hmac_sha512::Hash;
+use rand::rngs::OsRng;
 use ripemd::{Digest, Ripemd160};
 
 #[derive(Clone, Debug)]
@@ -67,6 +68,13 @@ impl Address {
             .into_vec()
             .expect("address string to be base58 encoded");
         Self::new(ripe)
+    }
+
+    pub fn generate() -> Self {
+        let psk = SecretKey::random(&mut OsRng);
+        let pek = SecretKey::random(&mut OsRng);
+        let address = Self::with_private_key(psk, pek);
+        address
     }
 }
 

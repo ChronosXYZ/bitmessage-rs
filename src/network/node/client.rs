@@ -61,4 +61,44 @@ impl NodeClient {
             .expect("Receiver not to be dropped");
         receiver.await.expect("Sender not to be dropped").unwrap()
     }
+
+    pub async fn generate_new_identity(&mut self, label: String) {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(WorkerCommand::GenerateIdentity { label, sender })
+            .await
+            .expect("Receiver not to be dropped");
+        receiver
+            .await
+            .expect("Sender not to be dropped")
+            .expect("repo not to fail")
+    }
+
+    pub async fn delete_identity(&mut self, address: String) {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(WorkerCommand::DeleteIdentity { address, sender })
+            .await
+            .expect("Receiver not to be dropped");
+        receiver
+            .await
+            .expect("Sender not to be dropped")
+            .expect("repo not to fail")
+    }
+
+    pub async fn rename_identity(&mut self, address: String, new_label: String) {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(WorkerCommand::RenameIdentity {
+                new_label,
+                address,
+                sender,
+            })
+            .await
+            .expect("Receiver not to be dropped");
+        receiver
+            .await
+            .expect("Sender not to be dropped")
+            .expect("repo not to fail")
+    }
 }

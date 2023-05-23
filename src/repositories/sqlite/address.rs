@@ -174,4 +174,16 @@ impl AddressRepository for SqliteAddressRepository {
             .execute(&mut conn)?;
         Ok(())
     }
+
+    async fn update_label(
+        &mut self,
+        ripe: String,
+        new_label: String,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        diesel::update(dsl::addresses.filter(schema::addresses::address.eq(ripe)))
+            .set((schema::addresses::label.eq(Some(new_label)),))
+            .execute(&mut conn)?;
+        Ok(())
+    }
 }

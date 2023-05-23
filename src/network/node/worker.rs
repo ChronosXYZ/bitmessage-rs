@@ -76,6 +76,8 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error> fo
     }
 }
 
+type DynError = Box<dyn Error + Send + Sync>;
+
 #[derive(Debug)]
 pub enum WorkerCommand {
     StartListening {
@@ -100,7 +102,20 @@ pub enum WorkerCommand {
         obj: messages::Object,
     },
     GetOwnIdentities {
-        sender: oneshot::Sender<Result<Vec<Address>, Box<dyn Error + Send + Sync>>>,
+        sender: oneshot::Sender<Result<Vec<Address>, DynError>>,
+    },
+    GenerateIdentity {
+        label: String,
+        sender: oneshot::Sender<Result<(), DynError>>,
+    },
+    RenameIdentity {
+        new_label: String,
+        address: String,
+        sender: oneshot::Sender<Result<(), DynError>>,
+    },
+    DeleteIdentity {
+        address: String,
+        sender: oneshot::Sender<Result<(), DynError>>,
     },
 }
 
@@ -371,6 +386,41 @@ impl NodeWorker {
                             .expect("receiver not to be dropped");
                         return;
                     }
+                }
+            }
+            WorkerCommand::GenerateIdentity { label, sender } => {
+                let mut address = Address::generate();
+                address.label = label;
+                let res = self.address_repo.store(address).await;
+                match res {
+                    Ok(_) => {
+                        sender.send(Ok(())).expect("receiver not to be dropped");
+                    }
+                    Err(e) => sender
+                        .send(Err(Box::from(e.to_string())))
+                        .expect("receiver not to be dropped"),
+                }
+            }
+            WorkerCommand::RenameIdentity {
+                new_label,
+                address,
+                sender,
+            } => match self.address_repo.update_label(address, new_label).await {
+                Ok(_) => {
+                    sender.send(Ok(())).expect("receiver not to be dropped");
+                }
+                Err(e) => sender
+                    .send(Err(Box::from(e.to_string())))
+                    .expect("receiver not to be dropped"),
+            },
+            WorkerCommand::DeleteIdentity { address, sender } => {
+                match self.address_repo.delete_address(address).await {
+                    Ok(_) => {
+                        sender.send(Ok(())).expect("receiver not to be dropped");
+                    }
+                    Err(e) => sender
+                        .send(Err(Box::from(e.to_string())))
+                        .expect("receiver not to be dropped"),
                 }
             }
         };

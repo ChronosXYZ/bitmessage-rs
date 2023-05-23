@@ -1,6 +1,5 @@
 use crate::ui::app::AppModel;
 use async_std::task;
-use futures::lock::Mutex;
 use relm4::RelmApp;
 use ui::state;
 

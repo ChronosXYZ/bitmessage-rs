@@ -28,6 +28,9 @@ pub trait AddressRepository {
         public_signing_key: PublicKey,
         public_encryption_key: PublicKey,
     ) -> Result<(), Box<dyn Error>>;
+
+    async fn update_label(&mut self, ripe: String, new_label: String)
+        -> Result<(), Box<dyn Error>>;
 }
 
 pub type AddressRepositorySync = dyn AddressRepository + Send + Sync;

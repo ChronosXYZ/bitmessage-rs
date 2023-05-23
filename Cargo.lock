@@ -392,6 +392,7 @@ dependencies = [
  "log",
  "multiaddr",
  "pretty_env_logger",
+ "rand 0.8.5",
  "relm4",
  "relm4-components",
  "relm4-icons",

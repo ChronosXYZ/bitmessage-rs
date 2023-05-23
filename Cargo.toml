@@ -33,5 +33,6 @@ thiserror = "1.0.40"
 void = "1.0.2"
 relm4 = { version="0.6.0-beta.1", features = ["libadwaita"] }
 relm4-components = "0.6.0-beta.1"
-relm4-icons = { version = "0.6.0-beta.6", features = ["person", "mail-inbox-filled", "desktop-pulse-filled"] }
+relm4-icons = { version = "0.6.0-beta.6", features = ["person", "mail-inbox-filled", "desktop-pulse-filled", "plus", "pencil-and-paper", "x-circular", "edit"] }
 directories = "5.0.1"
+rand = { version = "0.8.5", features = ["getrandom"] }

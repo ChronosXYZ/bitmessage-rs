@@ -1,13 +1,18 @@
-use relm4::gtk::prelude::*;
+use adw;
+use gtk::{self, prelude::*};
+use relm4::component::{AsyncComponentController, AsyncController};
 use relm4::RelmWidgetExt;
 use relm4::{
     component::{AsyncComponent, AsyncComponentParts},
-    gtk,
     loading_widgets::LoadingWidgets,
     view,
 };
 
-pub(crate) struct MessagesModel {}
+use super::messages_sidebar::MessagesSidebar;
+
+pub(crate) struct MessagesModel {
+    sidebar: AsyncController<MessagesSidebar>,
+}
 
 #[derive(Debug)]
 pub(crate) enum MessagesInput {}
@@ -22,14 +27,29 @@ impl AsyncComponent for MessagesModel {
     view! {
         #[root]
         gtk::ScrolledWindow {
-            gtk::CenterBox {
-                #[wrap(Some)]
-                set_center_widget = &gtk::Label {
-                    set_label: "No messages yet :(",
-                    add_css_class: "large-title"
+            adw::Leaflet {
+                model.sidebar.widget() -> &gtk::ScrolledWindow,
+                gtk::Separator {},
+                gtk::CenterBox {
+                    #[wrap(Some)]
+                    set_center_widget = &gtk::Label {
+                        set_label: "No messages yet :(",
+                        add_css_class: "large-title"
+                    }
                 }
             }
         }
+
+
+        //gtk::ScrolledWindow {
+        //    gtk::CenterBox {
+        //        #[wrap(Some)]
+        //        set_center_widget = &gtk::Label {
+        //            set_label: "No messages yet :(",
+        //            add_css_class: "large-title"
+        //        }
+        //    }
+        //}
     }
 
     fn init_loading_widgets(root: &mut Self::Root) -> Option<LoadingWidgets> {
@@ -58,7 +78,8 @@ impl AsyncComponent for MessagesModel {
         root: Self::Root,
         sender: relm4::AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
-        let model = Self {};
+        let sidebar = MessagesSidebar::builder().launch(()).detach();
+        let model = Self { sidebar };
         let widgets = view_output!();
         AsyncComponentParts { model, widgets }
     }

@@ -99,6 +99,11 @@ pub struct MessagesSidebar {
 }
 
 #[derive(Debug)]
+pub enum MessagesSidebarInput {
+    IdentitiesListUpdated,
+}
+
+#[derive(Debug)]
 pub enum MessagesSidebarOutput {
     FolderSelected(SelectedFolder),
 }
@@ -106,7 +111,7 @@ pub enum MessagesSidebarOutput {
 #[relm4::component(pub async)]
 impl SimpleAsyncComponent for MessagesSidebar {
     type Init = ();
-    type Input = ();
+    type Input = MessagesSidebarInput;
     type Output = MessagesSidebarOutput;
 
     view! {
@@ -207,6 +212,9 @@ impl SimpleAsyncComponent for MessagesSidebar {
         let list_view = gtk::ListView::new(Some(selection_model.clone()), Some(factory));
 
         selection_model.connect_selected_item_notify(move |sel_model| {
+            if sel_model.selected_item().is_none() {
+                return;
+            }
             let tree_list_row = sel_model
                 .selected_item()
                 .unwrap()
@@ -250,5 +258,36 @@ impl SimpleAsyncComponent for MessagesSidebar {
 
         let widgets = view_output!();
         AsyncComponentParts { model, widgets }
+    }
+
+    async fn update(&mut self, message: Self::Input, sender: AsyncComponentSender<Self>) {
+        match message {
+            MessagesSidebarInput::IdentitiesListUpdated => {
+                let root_model = self
+                    .tree_model
+                    .model()
+                    .downcast::<gio::ListStore>()
+                    .unwrap();
+                root_model.remove_all();
+                let identities = state::STATE
+                    .write_inner()
+                    .client
+                    .as_mut()
+                    .unwrap()
+                    .get_own_identities()
+                    .await;
+                for i in identities {
+                    root_model.append(&BoxedAnyObject::new(FolderItem {
+                        label: if i.label.is_empty() {
+                            "No label".to_string()
+                        } else {
+                            i.label
+                        },
+                        subtitle: i.string_repr,
+                        item_type: FolderItemType::Identity,
+                    }))
+                }
+            }
+        }
     }
 }

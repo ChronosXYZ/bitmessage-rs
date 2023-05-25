@@ -9,7 +9,9 @@ use relm4::{
 use relm4::{AsyncComponentSender, RelmWidgetExt};
 
 use super::messages_content::{MessagesContent, MessagesContentInput};
-use super::messages_sidebar::{MessagesSidebar, MessagesSidebarOutput, SelectedFolder};
+use super::messages_sidebar::{
+    MessagesSidebar, MessagesSidebarInput, MessagesSidebarOutput, SelectedFolder,
+};
 
 pub(crate) struct MessagesModel {
     sidebar: AsyncController<MessagesSidebar>,
@@ -19,6 +21,7 @@ pub(crate) struct MessagesModel {
 #[derive(Debug)]
 pub(crate) enum MessagesInput {
     FolderSelected(SelectedFolder),
+    IdentitiesListUpdated,
 }
 
 #[relm4::component(pub async)]
@@ -86,6 +89,9 @@ impl AsyncComponent for MessagesModel {
             MessagesInput::FolderSelected(v) => {
                 self.content.emit(MessagesContentInput::FolderSelected(v));
             }
+            MessagesInput::IdentitiesListUpdated => self
+                .sidebar
+                .emit(MessagesSidebarInput::IdentitiesListUpdated),
         }
     }
 }

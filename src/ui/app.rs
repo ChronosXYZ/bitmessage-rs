@@ -10,7 +10,7 @@ use crate::ui::components::identities_list::IdentitiesListInput;
 
 use super::components::dialogs::identity_dialog::{IdentityDialogModel, IdentityDialogOutput};
 use super::components::identities_list::{IdentitiesListModel, IdentitiesListOutput};
-use super::components::messages::MessagesModel;
+use super::components::messages::{MessagesInput, MessagesModel};
 use super::components::network_status::NetworkStatusModel;
 
 pub(crate) struct AppModel {
@@ -27,6 +27,7 @@ pub(crate) enum AppInput {
     PageChanged,
     HandleClickNewIdentity,
     ShowPlusButton(bool),
+    IdentitiesListUpdated,
 }
 
 #[relm4::component(pub)]
@@ -103,6 +104,7 @@ impl SimpleComponent for AppModel {
                 .launch(())
                 .forward(sender.input_sender(), |message| match message {
                     IdentitiesListOutput::EmptyList(v) => AppInput::ShowPlusButton(!v),
+                    IdentitiesListOutput::IdentitiesListUpdated => AppInput::IdentitiesListUpdated,
                 });
         let messages_component = MessagesModel::builder().launch(()).detach();
         let network_status_component = NetworkStatusModel::builder().launch(()).detach();
@@ -150,6 +152,9 @@ impl SimpleComponent for AppModel {
                 self.identity_dialog.widget().present();
             }
             AppInput::ShowPlusButton(v) => self.show_plus_button = v,
+            AppInput::IdentitiesListUpdated => {
+                self.messages.emit(MessagesInput::IdentitiesListUpdated)
+            }
         }
     }
 }

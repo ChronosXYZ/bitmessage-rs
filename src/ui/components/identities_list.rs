@@ -86,6 +86,7 @@ pub enum IdentitiesListInput {
 #[derive(Debug)]
 pub enum IdentitiesListOutput {
     EmptyList(bool),
+    IdentitiesListUpdated,
 }
 
 impl IdentitiesListModel {
@@ -256,6 +257,15 @@ impl AsyncComponent for IdentitiesListModel {
                 self.list_view
                     .guard()
                     .push_back(IdentityListRowInit { label, address });
+                if self.is_list_empty {
+                    self.is_list_empty = false;
+                    sender
+                        .output(IdentitiesListOutput::EmptyList(false))
+                        .unwrap();
+                }
+                sender
+                    .output(IdentitiesListOutput::IdentitiesListUpdated)
+                    .unwrap();
             }
             IdentitiesListInput::DeleteIdentity(i) => {
                 let item = self
@@ -270,6 +280,15 @@ impl AsyncComponent for IdentitiesListModel {
                     .unwrap()
                     .delete_identity(item.address)
                     .await;
+                if self.list_view.len() == 0 {
+                    self.is_list_empty = true;
+                    sender
+                        .output(IdentitiesListOutput::EmptyList(true))
+                        .unwrap();
+                }
+                sender
+                    .output(IdentitiesListOutput::IdentitiesListUpdated)
+                    .unwrap();
             }
             IdentitiesListInput::HandleRenameIdentity(i) => {
                 let guard = self.list_view.guard();
@@ -301,6 +320,9 @@ impl AsyncComponent for IdentitiesListModel {
                     .await;
                 self.list_view
                     .send(index, IdentityListRowInput::RenameLabel(new_label));
+                sender
+                    .output(IdentitiesListOutput::IdentitiesListUpdated)
+                    .unwrap();
             }
         }
     }

@@ -20,15 +20,6 @@ pub struct SelectedFolder {
     pub folder: String,
 }
 
-impl SelectedFolder {
-    pub fn new() -> Self {
-        SelectedFolder {
-            identity_address: String::new(),
-            folder: String::new(),
-        }
-    }
-}
-
 #[derive(Debug)]
 enum FolderItemType {
     Identity,
@@ -84,7 +75,7 @@ impl RelmListItem for FolderItem {
         (expander, widgets)
     }
 
-    fn bind(&mut self, widgets: &mut Self::Widgets, root: &mut Self::Root, _column_index: usize) {
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root, _column_index: usize) {
         widgets.label.set_text(&self.label);
         if let FolderItemType::Identity = self.item_type {
             widgets.subtitle.set_visible(true);

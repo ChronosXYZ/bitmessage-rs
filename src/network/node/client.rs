@@ -6,9 +6,9 @@ use futures::{
 };
 use libp2p::{Multiaddr, PeerId};
 
-use crate::network::address::Address;
+use crate::{network::address::Address, repositories::sqlite::models};
 
-use super::worker::WorkerCommand;
+use super::worker::{Folder, WorkerCommand};
 
 pub struct NodeClient {
     sender: mpsc::Sender<WorkerCommand>,
@@ -92,6 +92,22 @@ impl NodeClient {
             .send(WorkerCommand::RenameIdentity {
                 new_label,
                 address,
+                sender,
+            })
+            .await
+            .expect("Receiver not to be dropped");
+        receiver
+            .await
+            .expect("Sender not to be dropped")
+            .expect("repo not to fail")
+    }
+
+    pub async fn get_messages(&mut self, address: String, folder: Folder) -> Vec<models::Message> {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(WorkerCommand::GetMessages {
+                address,
+                folder,
                 sender,
             })
             .await

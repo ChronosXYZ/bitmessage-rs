@@ -31,14 +31,15 @@ use crate::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
             BitmessageProtocolCodec, BitmessageResponse,
         },
-        messages::{self, MessageCommand, MessagePayload},
+        messages::{self, MessageCommand, MessagePayload, UnencryptedMsg},
     },
     repositories::{
         address::AddressRepositorySync,
         inventory::InventoryRepositorySync,
+        message::MessageRepositorySync,
         sqlite::{
             address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
-            message::SqliteMessageRepository,
+            message::SqliteMessageRepository, models,
         },
     },
 };
@@ -50,6 +51,12 @@ const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/repositories/sqlite/migrations");
 const COMMON_PUBSUB_TOPIC: &'static str = "common";
+
+#[derive(Debug)]
+pub enum Folder {
+    Inbox,
+    Sent,
+}
 
 #[derive(Debug)]
 pub struct DbConnectionOpts {
@@ -117,6 +124,11 @@ pub enum WorkerCommand {
         address: String,
         sender: oneshot::Sender<Result<(), DynError>>,
     },
+    GetMessages {
+        address: String,
+        folder: Folder,
+        sender: oneshot::Sender<Result<Vec<models::Message>, DynError>>,
+    },
 }
 
 pub struct NodeWorker {
@@ -130,6 +142,7 @@ pub struct NodeWorker {
 
     inventory_repo: Box<InventoryRepositorySync>,
     address_repo: Box<AddressRepositorySync>,
+    messages_repo: Box<MessageRepositorySync>,
 }
 
 impl NodeWorker {
@@ -232,6 +245,7 @@ impl NodeWorker {
         let (sender, receiver) = mpsc::channel(0);
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));
+        let message_repo = Box::new(SqliteMessageRepository::new(pool.clone()));
         (
             Self {
                 local_peer_id,
@@ -239,7 +253,7 @@ impl NodeWorker {
                 handler: Handler::new(
                     address_repo.clone(),
                     inventory_repo.clone(),
-                    Box::new(SqliteMessageRepository::new(pool.clone())),
+                    message_repo.clone(),
                     sender.clone(),
                 ),
                 command_receiver: receiver,
@@ -249,6 +263,7 @@ impl NodeWorker {
 
                 address_repo: address_repo.clone(),
                 inventory_repo: inventory_repo.clone(),
+                messages_repo: message_repo.clone(),
             },
             sender,
         )
@@ -425,6 +440,26 @@ impl NodeWorker {
                         .expect("receiver not to be dropped"),
                 }
             }
+            WorkerCommand::GetMessages {
+                address,
+                folder,
+                sender,
+            } => match folder {
+                Folder::Inbox => {
+                    match self.messages_repo.get_messages_by_recipient(address).await {
+                        Ok(v) => sender.send(Ok(v)).expect("receiver not to be dropped"),
+                        Err(e) => sender
+                            .send(Err(Box::from(e.to_string())))
+                            .expect("receiver not to be dropped"),
+                    }
+                }
+                Folder::Sent => match self.messages_repo.get_messages_by_sender(address).await {
+                    Ok(v) => sender.send(Ok(v)).expect("receiver not to be dropped"),
+                    Err(e) => sender
+                        .send(Err(Box::from(e.to_string())))
+                        .expect("receiver not to be dropped"),
+                },
+            },
         };
     }
 

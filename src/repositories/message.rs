@@ -18,6 +18,16 @@ pub trait MessageRepository {
 
     /// Get all messages in repository
     async fn get_messages(&self) -> Result<Vec<models::Message>, Box<dyn Error>>;
+
+    async fn get_messages_by_recipient(
+        &self,
+        address: String,
+    ) -> Result<Vec<models::Message>, Box<dyn Error>>;
+
+    async fn get_messages_by_sender(
+        &self,
+        address: String,
+    ) -> Result<Vec<models::Message>, Box<dyn Error>>;
 }
 
 pub type MessageRepositorySync = dyn MessageRepository + Sync + Send;

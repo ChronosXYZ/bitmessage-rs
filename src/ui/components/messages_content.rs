@@ -1,9 +1,11 @@
-use gtk::traits::{OrientableExt, WidgetExt};
+use gtk::traits::{OrientableExt, TextViewExt, WidgetExt};
 use relm4::{
     component::{AsyncComponent, AsyncComponentParts},
     loading_widgets::LoadingWidgets,
     view, AsyncComponentSender, RelmWidgetExt,
 };
+
+use crate::{network::node::worker::Folder, ui::state};
 
 use super::{
     messages_sidebar::SelectedFolder,
@@ -15,6 +17,7 @@ struct MessagesListItem {
     title: String,
     date: chrono::NaiveDateTime,
     from: String,
+    body: String,
 }
 
 struct MessagesListItemWidgets {
@@ -25,7 +28,7 @@ impl RelmListItem for MessagesListItem {
     type Root = gtk::Box;
     type Widgets = MessagesListItemWidgets;
 
-    fn setup(list_item: &gtk::ListItem, column_index: usize) -> (Self::Root, Self::Widgets) {
+    fn setup(_list_item: &gtk::ListItem, _column_index: usize) -> (Self::Root, Self::Widgets) {
         view! {
             #[name(root)]
             gtk::Box{
@@ -37,11 +40,26 @@ impl RelmListItem for MessagesListItem {
         let widgets = Self::Widgets { label };
         (root, widgets)
     }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root, column_index: usize) {
+        match column_index {
+            0 => widgets
+                .label
+                .set_text(&self.date.format("%Y-%m-%d %H:%M:%S").to_string()), // Date
+            1 => widgets.label.set_text(&self.from),  // From
+            2 => widgets.label.set_text(&self.title), // Title
+            _ => {}
+        }
+    }
 }
 
 pub struct MessagesContent {
     selected_folder: Option<SelectedFolder>,
     messages_list_view: TypedListView<MessagesListItem, gtk::SingleSelection, gtk::ColumnView>,
+    current_msg: Option<MessagesListItem>,
+    current_msg_buffer: gtk::TextBuffer,
+
+    list_stack: gtk::Stack,
 }
 
 #[derive(Debug)]
@@ -63,10 +81,38 @@ impl AsyncComponent for MessagesContent {
             set_hexpand: true,
             match model.selected_folder.clone() {
                 Some(_) => {
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        #[local_ref]
-                        messages_list -> gtk::ColumnView {}
+                    #[name(list_stack)]
+                    gtk::Stack {
+                        set_vexpand: true,
+
+                        add_named[Some("list")] = &gtk::Paned {
+                            set_margin_all: 12,
+                            set_orientation: gtk::Orientation::Vertical,
+
+                            #[wrap(Some)]
+                            set_start_child = &gtk::Frame {
+                                #[local_ref]
+                                messages_list -> gtk::ColumnView {},
+                            },
+                            #[wrap(Some)]
+                            set_end_child = &gtk::Frame {
+                                #[name(message_text_view)]
+                                gtk::TextView {
+                                    set_editable: false,
+                                    set_cursor_visible: false,
+
+                                    #[wrap(Some)]
+                                    set_buffer = &model.current_msg_buffer.clone(),
+                                }
+                            },
+                        },
+                        add_named[Some("empty")] = &gtk::Label {
+                            set_vexpand: true,
+                            set_label: "No messages in the folder :(",
+                            add_css_class: "large-title"
+                        },
+
+                        set_visible_child_name: "empty",
                     }
                 },
                 None => {
@@ -102,9 +148,9 @@ impl AsyncComponent for MessagesContent {
     }
 
     async fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
-        sender: AsyncComponentSender<Self>,
+        _sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
         let messages_list_view = TypedListView::with_sorting_col(vec![
             "Date".to_string(),
@@ -112,13 +158,17 @@ impl AsyncComponent for MessagesContent {
             "Title".to_string(),
         ]);
 
-        let model = Self {
+        let mut model = Self {
             selected_folder: None,
             messages_list_view,
+            current_msg: None,
+            current_msg_buffer: gtk::TextBuffer::new(None),
+            list_stack: gtk::Stack::default(),
         };
-        let messages_list = &model.messages_list_view.view;
 
+        let messages_list = &model.messages_list_view.view;
         let widgets = view_output!();
+        model.list_stack = widgets.list_stack.clone();
         AsyncComponentParts { model, widgets }
     }
 
@@ -130,7 +180,36 @@ impl AsyncComponent for MessagesContent {
     ) {
         match message {
             MessagesContentInput::FolderSelected(selected_folder) => {
-                self.selected_folder = Some(selected_folder);
+                self.selected_folder = Some(selected_folder.clone());
+                let folder = match selected_folder.folder.as_str() {
+                    "Inbox" => Folder::Inbox,
+                    "Sent" => Folder::Sent,
+                    _ => Folder::Inbox,
+                };
+                // load messages from db
+                let msgs = state::STATE
+                    .write_inner()
+                    .client
+                    .as_mut()
+                    .unwrap()
+                    .get_messages(selected_folder.identity_address.clone(), folder)
+                    .await;
+                if !msgs.is_empty() {
+                    self.list_stack.set_visible_child_name("list");
+                }
+                for m in msgs {
+                    let mime_msg = mail_parser::Message::parse(m.data.as_slice()).unwrap();
+                    let title = mime_msg.subject().unwrap().to_string();
+                    let date = m.created_at;
+                    let from = m.sender;
+                    let body = mime_msg.body_text(0).unwrap();
+                    self.messages_list_view.append(MessagesListItem {
+                        title,
+                        date,
+                        from,
+                        body: body.to_string(),
+                    });
+                }
             }
         }
     }

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use diesel::{
     r2d2::{ConnectionManager, Pool},
-    RunQueryDsl, SqliteConnection,
+    ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 
 use crate::{network::messages::UnencryptedMsg, repositories::message::MessageRepository};
@@ -14,6 +14,7 @@ use super::{
     schema::{self, messages::dsl},
 };
 
+#[derive(Clone)]
 pub struct SqliteMessageRepository {
     connection_pool: Pool<ConnectionManager<SqliteConnection>>,
 }
@@ -56,6 +57,28 @@ impl MessageRepository for SqliteMessageRepository {
     async fn get_messages(&self) -> Result<Vec<models::Message>, Box<dyn Error>> {
         let mut conn = self.connection_pool.get().unwrap();
         let results = dsl::messages.load::<models::Message>(&mut conn)?;
+        Ok(results)
+    }
+
+    async fn get_messages_by_recipient(
+        &self,
+        address: String,
+    ) -> Result<Vec<models::Message>, Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        let results = dsl::messages
+            .filter(schema::messages::recipient.eq(address))
+            .load::<models::Message>(&mut conn)?;
+        Ok(results)
+    }
+
+    async fn get_messages_by_sender(
+        &self,
+        address: String,
+    ) -> Result<Vec<models::Message>, Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        let results = dsl::messages
+            .filter(schema::messages::sender.eq(address))
+            .load::<models::Message>(&mut conn)?;
         Ok(results)
     }
 }

@@ -143,7 +143,7 @@ impl SimpleComponent for AppModel {
     fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
         match message {
             AppInput::PageChanged => match self.stack.visible_child_name().unwrap().as_str() {
-                "identities" => self.show_plus_button = true,
+                "identities" | "messages" => self.show_plus_button = true,
                 _ => self.show_plus_button = false,
             },
             AppInput::HandleClickNewIdentity => {

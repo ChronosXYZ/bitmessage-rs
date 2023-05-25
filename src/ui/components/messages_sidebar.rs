@@ -14,6 +14,21 @@ use relm4::{
 use super::utils::typed_list_view::RelmListItem;
 use crate::ui::state;
 
+#[derive(Debug, Clone)]
+pub struct SelectedFolder {
+    pub identity_address: String,
+    pub folder: String,
+}
+
+impl SelectedFolder {
+    pub fn new() -> Self {
+        SelectedFolder {
+            identity_address: String::new(),
+            folder: String::new(),
+        }
+    }
+}
+
 #[derive(Debug)]
 enum FolderItemType {
     Identity,
@@ -83,11 +98,16 @@ pub struct MessagesSidebar {
     list_view: gtk::ListView,
 }
 
+#[derive(Debug)]
+pub enum MessagesSidebarOutput {
+    FolderSelected(SelectedFolder),
+}
+
 #[relm4::component(pub async)]
 impl SimpleAsyncComponent for MessagesSidebar {
     type Init = ();
     type Input = ();
-    type Output = ();
+    type Output = MessagesSidebarOutput;
 
     view! {
         #[root]
@@ -103,7 +123,7 @@ impl SimpleAsyncComponent for MessagesSidebar {
     async fn init(
         _init: Self::Init,
         root: Self::Root,
-        _sender: AsyncComponentSender<Self>,
+        sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
         let root_store = gio::ListStore::new(BoxedAnyObject::static_type());
 
@@ -185,6 +205,43 @@ impl SimpleAsyncComponent for MessagesSidebar {
 
         let selection_model = gtk::SingleSelection::new(Some(tree_model.clone()));
         let list_view = gtk::ListView::new(Some(selection_model.clone()), Some(factory));
+
+        selection_model.connect_selected_item_notify(move |sel_model| {
+            let tree_list_row = sel_model
+                .selected_item()
+                .unwrap()
+                .downcast::<gtk::TreeListRow>()
+                .unwrap();
+            if tree_list_row.parent().is_none() {
+                return;
+            }
+            let parent_boxed_data = tree_list_row
+                .parent()
+                .unwrap()
+                .item()
+                .unwrap()
+                .downcast::<BoxedAnyObject>()
+                .unwrap();
+            let parent_of_selected_item: Ref<FolderItem> = parent_boxed_data.borrow();
+            let boxed_obj = tree_list_row
+                .item()
+                .unwrap()
+                .downcast::<BoxedAnyObject>()
+                .unwrap();
+            let selected_item: Ref<FolderItem> = boxed_obj.borrow();
+            log::debug!(
+                "Item selected: {:?}/{:?}",
+                parent_of_selected_item,
+                selected_item
+            );
+            let sender = sender.clone();
+            sender
+                .output(MessagesSidebarOutput::FolderSelected(SelectedFolder {
+                    identity_address: parent_of_selected_item.subtitle.clone(),
+                    folder: selected_item.label.clone(),
+                }))
+                .unwrap();
+        });
 
         let model = Self {
             list_view: list_view.clone(),

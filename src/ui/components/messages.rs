@@ -1,21 +1,25 @@
 use adw;
 use gtk::{self, prelude::*};
 use relm4::component::{AsyncComponentController, AsyncController};
-use relm4::RelmWidgetExt;
 use relm4::{
     component::{AsyncComponent, AsyncComponentParts},
     loading_widgets::LoadingWidgets,
     view,
 };
+use relm4::{AsyncComponentSender, RelmWidgetExt};
 
-use super::messages_sidebar::MessagesSidebar;
+use super::messages_content::{MessagesContent, MessagesContentInput};
+use super::messages_sidebar::{MessagesSidebar, MessagesSidebarOutput, SelectedFolder};
 
 pub(crate) struct MessagesModel {
     sidebar: AsyncController<MessagesSidebar>,
+    content: AsyncController<MessagesContent>,
 }
 
 #[derive(Debug)]
-pub(crate) enum MessagesInput {}
+pub(crate) enum MessagesInput {
+    FolderSelected(SelectedFolder),
+}
 
 #[relm4::component(pub async)]
 impl AsyncComponent for MessagesModel {
@@ -30,28 +34,9 @@ impl AsyncComponent for MessagesModel {
             adw::Leaflet {
                 model.sidebar.widget() -> &gtk::ScrolledWindow,
                 gtk::Separator {},
-                gtk::Box {
-                    set_valign: gtk::Align::Center,
-                    set_halign: gtk::Align::Center,
-                    gtk::Label {
-                        set_halign: gtk::Align::Center,
-                        set_label: "No messages yet :(",
-                        add_css_class: "large-title"
-                    }
-                }
+                model.content.widget() -> &gtk::Box {}
             }
         }
-
-
-        //gtk::ScrolledWindow {
-        //    gtk::CenterBox {
-        //        #[wrap(Some)]
-        //        set_center_widget = &gtk::Label {
-        //            set_label: "No messages yet :(",
-        //            add_css_class: "large-title"
-        //        }
-        //    }
-        //}
     }
 
     fn init_loading_widgets(root: &mut Self::Root) -> Option<LoadingWidgets> {
@@ -76,13 +61,31 @@ impl AsyncComponent for MessagesModel {
     }
 
     async fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
-        sender: relm4::AsyncComponentSender<Self>,
+        sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
-        let sidebar = MessagesSidebar::builder().launch(()).detach();
-        let model = Self { sidebar };
+        let sidebar = MessagesSidebar::builder()
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                MessagesSidebarOutput::FolderSelected(v) => MessagesInput::FolderSelected(v),
+            });
+        let content = MessagesContent::builder().launch(()).detach();
+        let model = Self { sidebar, content };
         let widgets = view_output!();
         AsyncComponentParts { model, widgets }
+    }
+
+    async fn update(
+        &mut self,
+        message: Self::Input,
+        _sender: AsyncComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            MessagesInput::FolderSelected(v) => {
+                self.content.emit(MessagesContentInput::FolderSelected(v));
+            }
+        }
     }
 }

@@ -4,51 +4,77 @@ use gtk::{
     self, gio,
     glib::BoxedAnyObject,
     prelude::{Cast, CastNone, ObjectExt, StaticType},
-    traits::WidgetExt,
+    traits::{OrientableExt, WidgetExt},
 };
 use relm4::{
     component::{AsyncComponentParts, SimpleAsyncComponent},
     view, AsyncComponentSender,
 };
 
+use super::utils::typed_list_view::RelmListItem;
 use crate::ui::state;
 
-use super::utils::typed_list_view::RelmListItem;
+#[derive(Debug)]
+enum FolderItemType {
+    Identity,
+    Inbox,
+    Sent,
+}
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug)]
 struct FolderItem {
     label: String,
-    is_top_level: bool,
+    subtitle: String,
+    item_type: FolderItemType,
 }
 
 struct IdentityItemWidgets {
     expander: gtk::TreeExpander,
     label: gtk::Label,
+    subtitle: gtk::Label,
 }
 
 impl RelmListItem for FolderItem {
     type Root = gtk::TreeExpander;
     type Widgets = IdentityItemWidgets;
 
-    fn setup(list_item: &gtk::ListItem, column_index: usize) -> (Self::Root, Self::Widgets) {
+    fn setup(_list_item: &gtk::ListItem, _column_index: usize) -> (Self::Root, Self::Widgets) {
         view! {
             #[name(expander)]
             gtk::TreeExpander {
-                #[name(label)]
                 #[wrap(Some)]
-                set_child = &gtk::Label {}
+                set_child = &gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_valign: gtk::Align::Center,
+
+                    #[name(label)]
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        set_valign: gtk::Align::Center
+                    },
+                    #[name(subtitle)]
+                    gtk::Label {
+                        add_css_class: "subtitle",
+                        set_visible: false
+                    }
+                }
             }
         }
 
         let widgets = IdentityItemWidgets {
             expander: expander.clone(),
             label,
+            subtitle,
         };
         (expander, widgets)
     }
 
     fn bind(&mut self, widgets: &mut Self::Widgets, root: &mut Self::Root, _column_index: usize) {
         widgets.label.set_text(&self.label);
+        if let FolderItemType::Identity = self.item_type {
+            widgets.subtitle.set_visible(true);
+            widgets.subtitle.set_text(&self.subtitle);
+        }
     }
 }
 
@@ -66,16 +92,18 @@ impl SimpleAsyncComponent for MessagesSidebar {
     view! {
         #[root]
         gtk::ScrolledWindow {
-            set_width_request: 200,
+            set_width_request: 300,
             #[local_ref]
-            list_view -> gtk::ListView {}
+            list_view -> gtk::ListView {
+                add_css_class: "navigation-sidebar",
+            }
         }
     }
 
     async fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
-        sender: AsyncComponentSender<Self>,
+        _sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
         let root_store = gio::ListStore::new(BoxedAnyObject::static_type());
 
@@ -88,31 +116,30 @@ impl SimpleAsyncComponent for MessagesSidebar {
             .await;
         for i in identities {
             root_store.append(&BoxedAnyObject::new(FolderItem {
-                label: format!(
-                    "{} ({})",
-                    if i.label.is_empty() {
-                        "No label"
-                    } else {
-                        i.label.as_str()
-                    },
-                    i.string_repr
-                ),
-                is_top_level: true,
+                label: if i.label.is_empty() {
+                    "No label".to_string()
+                } else {
+                    i.label
+                },
+                subtitle: i.string_repr,
+                item_type: FolderItemType::Identity,
             }))
         }
 
         let tree_model = gtk::TreeListModel::new(root_store.clone(), false, true, |o| {
             let boxed_object = o.clone().downcast::<BoxedAnyObject>().unwrap();
             let item: Ref<FolderItem> = boxed_object.borrow();
-            if item.is_top_level {
+            if let FolderItemType::Identity = item.item_type {
                 let inner_folders = gio::ListStore::new(BoxedAnyObject::static_type());
                 inner_folders.append(&BoxedAnyObject::new(FolderItem {
-                    label: "inbox".to_string(),
-                    is_top_level: false,
+                    label: "Inbox".to_string(),
+                    subtitle: String::new(),
+                    item_type: FolderItemType::Inbox,
                 }));
                 inner_folders.append(&BoxedAnyObject::new(FolderItem {
-                    label: "sent".to_string(),
-                    is_top_level: false,
+                    label: "Sent".to_string(),
+                    subtitle: String::new(),
+                    item_type: FolderItemType::Sent,
                 }));
                 return Some(inner_folders.upcast());
             }
@@ -129,7 +156,7 @@ impl SimpleAsyncComponent for MessagesSidebar {
 
         factory.connect_bind(move |_factory, item| {
             let list_item = item.downcast_ref::<gtk::ListItem>().unwrap();
-            let widget = list_item.downcast_ref::<gtk::ListItem>().unwrap().child();
+            let widget = list_item.child();
 
             let list_row = list_item
                 .item()
@@ -147,6 +174,10 @@ impl SimpleAsyncComponent for MessagesSidebar {
                 .unwrap();
 
             let mut widgets = unsafe { root.steal_data("widgets") }.unwrap();
+            if let FolderItemType::Identity = obj.item_type {
+                list_item.set_activatable(false);
+                list_item.set_selectable(false);
+            }
             obj.bind(&mut widgets, &mut root, 0);
             widgets.expander.set_list_row(Some(&list_row));
             unsafe { root.set_data("widgets", widgets) };

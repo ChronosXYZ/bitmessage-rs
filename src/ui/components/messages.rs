@@ -30,9 +30,11 @@ impl AsyncComponent for MessagesModel {
             adw::Leaflet {
                 model.sidebar.widget() -> &gtk::ScrolledWindow,
                 gtk::Separator {},
-                gtk::CenterBox {
-                    #[wrap(Some)]
-                    set_center_widget = &gtk::Label {
+                gtk::Box {
+                    set_valign: gtk::Align::Center,
+                    set_halign: gtk::Align::Center,
+                    gtk::Label {
+                        set_halign: gtk::Align::Center,
                         set_label: "No messages yet :(",
                         add_css_class: "large-title"
                     }

@@ -37,7 +37,7 @@ impl SimpleComponent for AppModel {
 
     view! {
         adw::ApplicationWindow {
-            set_default_size: (400, 300),
+            set_default_size: (800, 600),
 
             set_title = Some("Bitmessage-rs"),
 

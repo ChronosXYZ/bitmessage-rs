@@ -10,6 +10,7 @@ use diesel::{ExpressionMethods, QueryDsl, SqliteConnection};
 
 use crate::{
     network::messages::{Object, ObjectKind},
+    pow,
     repositories::inventory::InventoryRepository,
 };
 
@@ -62,6 +63,8 @@ impl InventoryRepository for SqliteInventoryRepository {
             expires: model.expires.timestamp(),
             kind,
             signature: model.signature.clone(),
+            nonce_trials_per_byte: pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE, // FIXME save this in db
+            extra_bytes: pow::NETWORK_MIN_EXTRA_BYTES,                     // FIXME save this in db
         }))
     }
 

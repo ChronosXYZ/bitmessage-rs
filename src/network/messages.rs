@@ -1,6 +1,13 @@
+use async_std::task;
+use chrono::Utc;
+use futures::{channel::mpsc, FutureExt, SinkExt};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use sha2::Digest;
+
+use crate::pow;
+
+use super::{address::Address, node::worker::WorkerCommand};
 
 pub type InventoryVector = Vec<String>;
 
@@ -31,6 +38,8 @@ pub struct Object {
     pub expires: i64,
     pub signature: Vec<u8>,
     pub kind: ObjectKind,
+    pub nonce_trials_per_byte: i32,
+    pub extra_bytes: i32,
 }
 
 impl Object {
@@ -47,7 +56,47 @@ impl Object {
             expires,
             signature,
             kind,
+            nonce_trials_per_byte: pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,
+            extra_bytes: pow::NETWORK_MIN_EXTRA_BYTES,
         }
+    }
+
+    pub fn with_signing(
+        identity: &Address,
+        kind: ObjectKind,
+        expires: chrono::DateTime<Utc>,
+    ) -> Self {
+        let mut object = Self::new(expires.timestamp(), Vec::new(), kind);
+
+        let ppsk =
+            libsecp256k1::SecretKey::parse(&identity.private_signing_key.unwrap().serialize())
+                .unwrap();
+        let (signature, _) = libsecp256k1::sign(
+            &libsecp256k1::Message::parse_slice(&object.hash).unwrap(),
+            &ppsk,
+        );
+        object.signature = signature.serialize().to_vec();
+        object
+    }
+
+    pub fn send(mut self, mut worker_sink: mpsc::Sender<WorkerCommand>) {
+        let target = pow::get_pow_target(
+            &self,
+            pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,
+            pow::NETWORK_MIN_EXTRA_BYTES,
+        );
+
+        task::spawn((move || async move {
+            pow::do_pow(target, self.hash.clone())
+                .then(move |(_, nonce)| async move {
+                    self.nonce = nonce;
+                    worker_sink
+                        .send(WorkerCommand::NonceCalculated { obj: self })
+                        .await
+                        .expect("receiver not to be dropped");
+                })
+                .await;
+        })());
     }
 }
 
@@ -85,20 +134,18 @@ pub enum MsgEncoding {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UnencryptedMsg {
-    pub behavior_bitfield: u32,
-    pub public_signing_key: Vec<u8>,
-    pub public_encryption_key: Vec<u8>,
+    pub behavior_bitfield: u32, // TODO currently unused
     pub sender_ripe: String,
     pub destination_ripe: String,
     pub encoding: MsgEncoding,
     pub message: Vec<u8>,
+    pub public_signing_key: Vec<u8>,
+    pub public_encryption_key: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UnencryptedPubkey {
-    pub behaviour_bitfield: u32,
+    pub behaviour_bitfield: u32, // TODO currently unused
     pub public_signing_key: Vec<u8>,
     pub public_encryption_key: Vec<u8>,
-    pub nonce_trials_per_byte: u64,
-    pub extra_bytes: u64,
 }

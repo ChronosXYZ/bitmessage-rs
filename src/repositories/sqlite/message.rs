@@ -81,4 +81,12 @@ impl MessageRepository for SqliteMessageRepository {
             .load::<models::Message>(&mut conn)?;
         Ok(results)
     }
+
+    async fn save_model(&mut self, model: models::Message) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        diesel::insert_into(schema::messages::table)
+            .values(&model)
+            .execute(&mut conn)?;
+        Ok(())
+    }
 }

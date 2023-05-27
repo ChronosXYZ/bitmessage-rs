@@ -1,16 +1,18 @@
-use std::{borrow::Cow, error::Error, fs, io, iter, time::Duration};
-
+use async_std::task;
+use chrono::Utc;
 use diesel::{
     connection::SimpleConnection,
     r2d2::{ConnectionManager, Pool},
     SqliteConnection,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use sha2::Digest;
+use std::{borrow::Cow, error::Error, fs, io, iter, time::Duration};
 
 use directories::ProjectDirs;
 use futures::{
     channel::{mpsc, oneshot},
-    select, StreamExt,
+    select, FutureExt, SinkExt, StreamExt,
 };
 use libp2p::{
     core::upgrade::Version,
@@ -23,6 +25,7 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use log::{debug, info};
+use serde::Serialize;
 
 use crate::{
     network::{
@@ -31,8 +34,9 @@ use crate::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
             BitmessageProtocolCodec, BitmessageResponse,
         },
-        messages::{self, MessageCommand, MessagePayload, UnencryptedMsg},
+        messages::{self, MessageCommand, MessagePayload, ObjectKind, UnencryptedMsg},
     },
+    pow,
     repositories::{
         address::AddressRepositorySync,
         inventory::InventoryRepositorySync,
@@ -128,6 +132,10 @@ pub enum WorkerCommand {
         address: String,
         folder: Folder,
         sender: oneshot::Sender<Result<Vec<models::Message>, DynError>>,
+    },
+    SendMessage {
+        msg: models::Message,
+        sender: oneshot::Sender<Result<(), DynError>>,
     },
 }
 
@@ -460,6 +468,7 @@ impl NodeWorker {
                         .expect("receiver not to be dropped"),
                 },
             },
+            WorkerCommand::SendMessage { msg, sender } => {}
         };
     }
 
@@ -516,6 +525,21 @@ impl NodeWorker {
                 }
             }
         }
+    }
+
+    pub fn serialize_and_encrypt_payload<T>(
+        object: T,
+        secret_key: &libsecp256k1::SecretKey,
+    ) -> Vec<u8>
+    where
+        T: Serialize,
+    {
+        let encrypted = ecies::encrypt(
+            &ecies::PublicKey::from_secret_key(secret_key).serialize(),
+            serde_cbor::to_vec(&object).unwrap().as_ref(),
+        )
+        .unwrap();
+        encrypted
     }
 }
 

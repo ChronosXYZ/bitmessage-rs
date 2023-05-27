@@ -10,8 +10,11 @@ use futures::{
 };
 
 use crate::{
-    network::messages::{
-        MessageCommand, MessagePayload, NetworkMessage, Object, ObjectKind, UnencryptedPubkey,
+    network::{
+        messages::{
+            MessageCommand, MessagePayload, NetworkMessage, Object, ObjectKind, UnencryptedPubkey,
+        },
+        node::worker::NodeWorker,
     },
     pow,
     repositories::{
@@ -225,50 +228,20 @@ impl Handler {
                     behaviour_bitfield: 0,
                     public_signing_key: serialized_psk.to_vec(),
                     public_encryption_key: serialized_pek.to_vec(),
-                    nonce_trials_per_byte: pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE as u64,
-                    extra_bytes: pow::NETWORK_MIN_EXTRA_BYTES as u64,
                 };
 
-                let ppsk =
-                    libsecp256k1::SecretKey::parse(&i.private_signing_key.unwrap().serialize())
-                        .unwrap();
-
-                let encrypted = ecies::encrypt(
-                    &ecies::PublicKey::from_secret_key(&i.public_decryption_key).serialize(),
-                    serde_cbor::to_vec(&unencrypted_pubkey).unwrap().as_ref(),
-                )
-                .unwrap();
-                let signing_data = serde_cbor::to_vec(&unencrypted_pubkey).unwrap();
-                let hash = sha2::Sha256::digest(signing_data);
-                let (signature, _) =
-                    libsecp256k1::sign(&libsecp256k1::Message::parse_slice(&hash).unwrap(), &ppsk);
-                let mut obj = Object::new(
-                    expires.timestamp(),
-                    signature.serialize().to_vec(),
+                let obj = Object::with_signing(
+                    &i,
                     ObjectKind::Pubkey {
-                        tag: i.tag,
-                        encrypted,
+                        tag: i.tag.clone(),
+                        encrypted: NodeWorker::serialize_and_encrypt_payload(
+                            unencrypted_pubkey,
+                            &i.public_decryption_key,
+                        ),
                     },
+                    expires,
                 );
-
-                let target = pow::get_pow_target(
-                    &obj,
-                    pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,
-                    pow::NETWORK_MIN_EXTRA_BYTES,
-                );
-
-                let mut sender = self.worker_event_sender.clone();
-                task::spawn((move || async move {
-                    pow::do_pow(target, obj.hash.clone())
-                        .then(move |(_, nonce)| async move {
-                            obj.nonce = nonce;
-                            sender
-                                .send(WorkerCommand::NonceCalculated { obj })
-                                .await
-                                .expect("receiver not to be dropped");
-                        })
-                        .await;
-                })());
+                obj.send(self.worker_event_sender.clone());
             }
         }
 

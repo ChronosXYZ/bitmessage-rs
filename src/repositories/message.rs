@@ -16,6 +16,8 @@ pub trait MessageRepository {
         signature: Vec<u8>,
     ) -> Result<(), Box<dyn Error>>;
 
+    async fn save_model(&mut self, model: models::Message) -> Result<(), Box<dyn Error>>;
+
     /// Get all messages in repository
     async fn get_messages(&self) -> Result<Vec<models::Message>, Box<dyn Error>>;
 

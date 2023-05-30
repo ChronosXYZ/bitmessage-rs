@@ -1,0 +1,13 @@
+version: "3"
+
+services:
+  devzone:
+    image: "ubuntu:lunar"
+    stdin_open: true
+    tty: true
+    volumes:
+      - ../:/app/bitmessage-rs:rw
+    network_mode: host
+    environment:
+      - DISPLAY
+    entrypoint: /bin/bash

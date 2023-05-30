@@ -10,7 +10,7 @@ use diesel::{
 use crate::{network::messages::UnencryptedMsg, repositories::message::MessageRepository};
 
 use super::{
-    models,
+    models::{self, MessageStatus},
     schema::{self, messages::dsl},
 };
 
@@ -44,7 +44,7 @@ impl MessageRepository for SqliteMessageRepository {
             recipient: msg.destination_ripe,
             data: msg.message,
             created_at: Utc::now().naive_utc(),
-            status: "unknown".to_string(), // FIXME
+            status: MessageStatus::Received.to_string(),
             signature,
         };
         diesel::insert_into(schema::messages::table)
@@ -86,6 +86,18 @@ impl MessageRepository for SqliteMessageRepository {
         let mut conn = self.connection_pool.get().unwrap();
         diesel::insert_into(schema::messages::table)
             .values(&model)
+            .execute(&mut conn)?;
+        Ok(())
+    }
+
+    async fn update_message_status(
+        &mut self,
+        hash: String,
+        status: MessageStatus,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        diesel::update(dsl::messages.filter(schema::messages::hash.eq(hash)))
+            .set(schema::messages::status.eq(status.to_string()))
             .execute(&mut conn)?;
         Ok(())
     }

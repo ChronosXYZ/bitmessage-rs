@@ -79,7 +79,7 @@ impl Object {
         object
     }
 
-    pub fn send(mut self, mut worker_sink: mpsc::Sender<WorkerCommand>) {
+    pub fn do_proof_of_work(mut self, mut worker_sink: mpsc::Sender<WorkerCommand>) {
         let target = pow::get_pow_target(
             &self,
             pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,

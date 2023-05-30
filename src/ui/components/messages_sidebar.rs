@@ -251,7 +251,7 @@ impl SimpleAsyncComponent for MessagesSidebar {
         AsyncComponentParts { model, widgets }
     }
 
-    async fn update(&mut self, message: Self::Input, sender: AsyncComponentSender<Self>) {
+    async fn update(&mut self, message: Self::Input, _sender: AsyncComponentSender<Self>) {
         match message {
             MessagesSidebarInput::IdentitiesListUpdated => {
                 let root_model = self

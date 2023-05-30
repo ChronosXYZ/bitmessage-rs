@@ -40,3 +40,5 @@ identicon-rs = "4.0.1"
 adw = { package = "libadwaita", version = "0.3.0", features = ["gtk_v4_6", "v1_3"] }
 gtk = { package = "gtk4",version = "0.6.6", features = ["v4_10"] }
 mail-parser = "0.8.2"
+strum = { version = "0.24", features = ["derive"] }
+emailmessage = "0.2.2"

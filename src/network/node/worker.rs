@@ -1,4 +1,3 @@
-use async_std::task;
 use chrono::Utc;
 use diesel::{
     connection::SimpleConnection,
@@ -6,13 +5,13 @@ use diesel::{
     SqliteConnection,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use sha2::Digest;
-use std::{borrow::Cow, error::Error, fs, io, iter, time::Duration};
+use rand::distributions::{Alphanumeric, DistString};
+use std::{borrow::Cow, collections::HashMap, error::Error, fs, io, iter, time::Duration};
 
 use directories::ProjectDirs;
 use futures::{
     channel::{mpsc, oneshot},
-    select, FutureExt, SinkExt, StreamExt,
+    select, StreamExt,
 };
 use libp2p::{
     core::upgrade::Version,
@@ -34,16 +33,17 @@ use crate::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
             BitmessageProtocolCodec, BitmessageResponse,
         },
-        messages::{self, MessageCommand, MessagePayload, ObjectKind, UnencryptedMsg},
+        messages::{self, MessageCommand, MessagePayload, MsgEncoding, ObjectKind, UnencryptedMsg},
     },
-    pow,
     repositories::{
         address::AddressRepositorySync,
         inventory::InventoryRepositorySync,
         message::MessageRepositorySync,
         sqlite::{
-            address::SqliteAddressRepository, inventory::SqliteInventoryRepository,
-            message::SqliteMessageRepository, models,
+            address::SqliteAddressRepository,
+            inventory::SqliteInventoryRepository,
+            message::SqliteMessageRepository,
+            models::{self, MessageStatus},
         },
     },
 };
@@ -135,6 +135,7 @@ pub enum WorkerCommand {
     },
     SendMessage {
         msg: models::Message,
+        from: String,
         sender: oneshot::Sender<Result<(), DynError>>,
     },
 }
@@ -143,7 +144,12 @@ pub struct NodeWorker {
     local_peer_id: PeerId,
     swarm: Swarm<BitmessageNetBehaviour>,
     handler: Handler,
+    command_sender: mpsc::Sender<WorkerCommand>,
     command_receiver: mpsc::Receiver<WorkerCommand>,
+
+    pubkey_notifier: mpsc::Receiver<String>,
+    tracked_pubkeys: HashMap<String, bool>, // TODO populate it on startup
+
     pending_commands: Vec<WorkerCommand>,
     _sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
     common_topic: Sha256Topic,
@@ -251,6 +257,7 @@ impl NodeWorker {
             .expect("subscription not to fail");
 
         let (sender, receiver) = mpsc::channel(0);
+        let (pubkey_notifier_sink, pubkey_notifier) = mpsc::channel(0);
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));
         let message_repo = Box::new(SqliteMessageRepository::new(pool.clone()));
@@ -263,7 +270,11 @@ impl NodeWorker {
                     inventory_repo.clone(),
                     message_repo.clone(),
                     sender.clone(),
+                    pubkey_notifier_sink,
                 ),
+                command_sender: sender.clone(),
+                pubkey_notifier,
+                tracked_pubkeys: HashMap::new(),
                 command_receiver: receiver,
                 pending_commands: Vec::new(),
                 _sqlite_connection_pool: pool,
@@ -384,6 +395,18 @@ impl NodeWorker {
                     .expect("receiver not to be dropped"),
             },
             WorkerCommand::NonceCalculated { obj } => {
+                match &obj.kind {
+                    ObjectKind::Msg { encrypted: _ } => self
+                        .messages_repo
+                        .update_message_status(
+                            bs58::encode(&obj.hash).into_string(),
+                            MessageStatus::Sent,
+                        )
+                        .await
+                        .unwrap(),
+                    _ => {}
+                }
+
                 self.inventory_repo
                     .store_object(bs58::encode(&obj.hash).into_string(), obj)
                     .await
@@ -468,7 +491,71 @@ impl NodeWorker {
                         .expect("receiver not to be dropped"),
                 },
             },
-            WorkerCommand::SendMessage { msg, sender } => {}
+            WorkerCommand::SendMessage {
+                mut msg,
+                from,
+                sender,
+            } => {
+                let identity = self
+                    .address_repo
+                    .get_by_ripe_or_tag(from)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let recipient: Option<Address> = self
+                    .address_repo
+                    .get_by_ripe_or_tag(msg.recipient.clone())
+                    .await
+                    .unwrap();
+                match recipient {
+                    Some(v) => {
+                        msg.status = MessageStatus::WaitingForPOW.to_string();
+                        let unenc_msg = UnencryptedMsg {
+                            behavior_bitfield: 0,
+                            sender_ripe: msg.sender.clone(),
+                            destination_ripe: msg.recipient.clone(),
+                            encoding: MsgEncoding::Simple,
+                            message: msg.data.clone(),
+                            public_encryption_key: v
+                                .public_encryption_key
+                                .unwrap()
+                                .serialize()
+                                .to_vec(),
+                            public_signing_key: v.public_signing_key.unwrap().serialize().to_vec(),
+                        };
+                        let encrypted = Self::serialize_and_encrypt_payload_pub(
+                            unenc_msg,
+                            &v.public_encryption_key.unwrap(),
+                        );
+                        let object = messages::Object::with_signing(
+                            &identity,
+                            ObjectKind::Msg { encrypted },
+                            Utc::now() + chrono::Duration::days(7),
+                        );
+
+                        msg.hash = bs58::encode(&object.hash).into_string();
+                        self.messages_repo.save_model(msg.clone()).await.unwrap();
+                        object.do_proof_of_work(self.command_sender.clone());
+                    }
+                    None => {
+                        msg.status = MessageStatus::WaitingForPubkey.to_string();
+                        // we generate random hash value, cuz we don't really know real hash value of the message at the moment, and it's not that important
+                        msg.hash = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+                        self.messages_repo.save_model(msg.clone()).await.unwrap();
+                        // send getpubkey request
+                        let obj = messages::Object::with_signing(
+                            &identity,
+                            ObjectKind::Getpubkey {
+                                tag: Address::new(bs58::decode(msg.recipient).into_vec().unwrap())
+                                    .tag,
+                            },
+                            Utc::now() + chrono::Duration::days(7),
+                        );
+                        obj.do_proof_of_work(self.command_sender.clone());
+                    }
+                }
+                sender.send(Ok(())).unwrap();
+            }
         };
     }
 
@@ -492,8 +579,15 @@ impl NodeWorker {
                         log::debug!("Shutting down network event loop...");
                         return;
                     },
-               }
+                },
+                pubkey_notification = self.pubkey_notifier.next() => self.handle_pubkey_notification(pubkey_notification.unwrap()).await,
             }
+        }
+    }
+
+    async fn handle_pubkey_notification(&mut self, tag: String) {
+        if let Some(_) = self.tracked_pubkeys.get(&tag) {
+            // TODO seek for messages which haven't been sent yet because of empty public key of recipient
         }
     }
 
@@ -536,6 +630,21 @@ impl NodeWorker {
     {
         let encrypted = ecies::encrypt(
             &ecies::PublicKey::from_secret_key(secret_key).serialize(),
+            serde_cbor::to_vec(&object).unwrap().as_ref(),
+        )
+        .unwrap();
+        encrypted
+    }
+
+    pub fn serialize_and_encrypt_payload_pub<T>(
+        object: T,
+        public_key: &libsecp256k1::PublicKey,
+    ) -> Vec<u8>
+    where
+        T: Serialize,
+    {
+        let encrypted = ecies::encrypt(
+            &public_key.serialize(),
             serde_cbor::to_vec(&object).unwrap().as_ref(),
         )
         .unwrap();

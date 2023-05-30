@@ -1,12 +1,17 @@
+use emailmessage::{header, Message, SinglePart};
 use std::error::Error;
 
+use chrono::Utc;
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt,
 };
 use libp2p::{Multiaddr, PeerId};
 
-use crate::{network::address::Address, repositories::sqlite::models};
+use crate::{
+    network::address::Address,
+    repositories::sqlite::models::{self, MessageStatus},
+};
 
 use super::worker::{Folder, WorkerCommand};
 
@@ -110,6 +115,37 @@ impl NodeClient {
                 folder,
                 sender,
             })
+            .await
+            .expect("Receiver not to be dropped");
+        receiver
+            .await
+            .expect("Sender not to be dropped")
+            .expect("repo not to fail")
+    }
+
+    pub async fn send_message(&mut self, from: String, to: String, title: String, body: String) {
+        let (sender, receiver) = oneshot::channel();
+        let m: Message<SinglePart<&str>> = Message::builder().subject(title).mime_body(
+            SinglePart::builder()
+                .header(header::ContentType(
+                    "text/plain; charset=utf8".parse().unwrap(),
+                ))
+                .header(header::ContentTransferEncoding::QuotedPrintable)
+                .body(&body),
+        );
+        let data = m.to_string().into_bytes();
+        let msg = models::Message {
+            hash: "".to_string(),
+            sender: from.clone(),
+            recipient: to,
+            created_at: Utc::now().naive_utc(),
+            status: MessageStatus::Unknown.to_string(),
+            signature: Vec::new(),
+            data,
+        };
+
+        self.sender
+            .send(WorkerCommand::SendMessage { msg, from, sender })
             .await
             .expect("Receiver not to be dropped");
         receiver

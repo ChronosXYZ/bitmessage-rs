@@ -51,6 +51,7 @@
             pango
             gtk4
             libadwaita
+            adwaita-icon-theme
             openssl
             sqlite
             (if system == "aarch64-darwin" then
@@ -73,6 +74,7 @@
             gdk-pixbuf
             pango
             gtk4
+            gnome.adwaita-icon-theme
             libadwaita
             openssl
             sqlite

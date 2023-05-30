@@ -90,7 +90,7 @@ impl FactoryComponent for IdentityListRow {
         &mut self,
         index: &Self::Index,
         root: &Self::Root,
-        returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
+        _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
@@ -124,7 +124,7 @@ impl FactoryComponent for IdentityListRow {
         }
     }
 
-    fn update(&mut self, message: Self::Input, sender: FactorySender<Self>) {
+    fn update(&mut self, message: Self::Input, _sender: FactorySender<Self>) {
         match message {
             IdentityListRowInput::RenameLabel(new_label) => {
                 self.label = new_label;

@@ -1,12 +1,10 @@
-use async_std::task;
-use sha2::Digest;
 use std::{error::Error, sync::Arc};
 
 use chrono::Utc;
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
-    FutureExt, SinkExt,
+    SinkExt,
 };
 
 use crate::{
@@ -31,6 +29,7 @@ pub struct Handler {
     message_repo: Box<MessageRepositorySync>,
     requested_objects: Vec<String>, // TODO periodically request missing object from every connection we have
     worker_event_sender: mpsc::Sender<WorkerCommand>,
+    pubkey_notifier_sink: mpsc::Sender<String>,
 }
 
 impl Handler {
@@ -39,6 +38,7 @@ impl Handler {
         inventory_repo: Box<InventoryRepositorySync>,
         message_repo: Box<MessageRepositorySync>,
         worker_event_sender: mpsc::Sender<WorkerCommand>,
+        pubkey_notifier_sink: mpsc::Sender<String>,
     ) -> Handler {
         Handler {
             address_repo,
@@ -46,6 +46,7 @@ impl Handler {
             message_repo,
             requested_objects: Vec::new(),
             worker_event_sender,
+            pubkey_notifier_sink,
         }
     }
 
@@ -201,6 +202,8 @@ impl Handler {
             .await
             .expect("repo not to fail");
 
+        self.pubkey_notifier_sink.send(tag_str).await.unwrap();
+
         Ok(())
     }
 
@@ -241,7 +244,7 @@ impl Handler {
                     },
                     expires,
                 );
-                obj.send(self.worker_event_sender.clone());
+                obj.do_proof_of_work(self.worker_event_sender.clone());
             }
         }
 

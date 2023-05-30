@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::network::messages::UnencryptedMsg;
 
-use super::sqlite::models;
+use super::sqlite::models::{self, MessageStatus};
 
 #[async_trait]
 pub trait MessageRepository {
@@ -30,6 +30,12 @@ pub trait MessageRepository {
         &self,
         address: String,
     ) -> Result<Vec<models::Message>, Box<dyn Error>>;
+
+    async fn update_message_status(
+        &mut self,
+        hash: String,
+        status: MessageStatus,
+    ) -> Result<(), Box<dyn Error>>;
 }
 
 pub type MessageRepositorySync = dyn MessageRepository + Sync + Send;

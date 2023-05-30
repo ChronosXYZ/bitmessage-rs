@@ -1,7 +1,7 @@
+use super::schema::{addresses, inventory, messages};
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
-
-use super::schema::{addresses, inventory, messages};
+use strum::{Display, EnumString};
 
 #[derive(Queryable, Insertable, Debug, PartialEq)]
 #[diesel(table_name = addresses)]
@@ -26,7 +26,16 @@ pub(crate) struct Object {
     pub signature: Vec<u8>,
 }
 
-#[derive(Queryable, Insertable, Debug, PartialEq)]
+#[derive(EnumString, Display)]
+pub enum MessageStatus {
+    WaitingForPubkey,
+    WaitingForPOW,
+    Sent,
+    Received,
+    Unknown,
+}
+
+#[derive(Queryable, Insertable, Debug, PartialEq, Clone)]
 #[diesel(table_name = messages)]
 pub struct Message {
     pub hash: String,

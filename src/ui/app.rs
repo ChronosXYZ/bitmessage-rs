@@ -10,6 +10,7 @@ use crate::ui::components::identities_list::IdentitiesListInput;
 
 use super::components::dialogs::identity_dialog::{IdentityDialogModel, IdentityDialogOutput};
 use super::components::identities_list::{IdentitiesListModel, IdentitiesListOutput};
+use super::components::message_composer::MessageComposer;
 use super::components::messages::{MessagesInput, MessagesModel};
 use super::components::network_status::NetworkStatusModel;
 
@@ -25,7 +26,7 @@ pub(crate) struct AppModel {
 #[derive(Debug)]
 pub(crate) enum AppInput {
     PageChanged,
-    HandleClickNewIdentity,
+    HandleClickPlusButton,
     ShowPlusButton(bool),
     IdentitiesListUpdated,
 }
@@ -57,7 +58,7 @@ impl SimpleComponent for AppModel {
                     pack_start = if model.show_plus_button {
                         gtk::Button{
                             set_icon_name: icon_name::PLUS,
-                            connect_clicked => AppInput::HandleClickNewIdentity
+                            connect_clicked => AppInput::HandleClickPlusButton
                         }
                     } else { gtk::Box{} }
                 },
@@ -148,8 +149,16 @@ impl SimpleComponent for AppModel {
                 "identities" | "messages" => self.show_plus_button = true,
                 _ => self.show_plus_button = false,
             },
-            AppInput::HandleClickNewIdentity => {
-                self.identity_dialog.widget().present();
+            AppInput::HandleClickPlusButton => {
+                match self.stack.visible_child_name().unwrap().as_str() {
+                    "messages" => {
+                        let mut message_composer = MessageComposer::builder().launch(()).detach();
+                        message_composer.widget().present();
+                        message_composer.detach_runtime();
+                    }
+                    "identities" => self.identity_dialog.widget().present(),
+                    _ => {}
+                }
             }
             AppInput::ShowPlusButton(v) => self.show_plus_button = v,
             AppInput::IdentitiesListUpdated => {

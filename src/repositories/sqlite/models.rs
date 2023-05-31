@@ -35,7 +35,7 @@ pub enum MessageStatus {
     Unknown,
 }
 
-#[derive(Queryable, Insertable, Debug, PartialEq, Clone)]
+#[derive(Queryable, Insertable, Debug, PartialEq, Clone, AsChangeset)]
 #[diesel(table_name = messages)]
 pub struct Message {
     pub hash: String,

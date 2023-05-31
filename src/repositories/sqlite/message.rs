@@ -101,4 +101,27 @@ impl MessageRepository for SqliteMessageRepository {
             .execute(&mut conn)?;
         Ok(())
     }
+
+    async fn update_model(
+        &mut self,
+        hash: String,
+        model: models::Message,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        diesel::update(dsl::messages.filter(schema::messages::hash.eq(hash)))
+            .set(model)
+            .execute(&mut conn)?;
+        Ok(())
+    }
+
+    async fn get_messages_by_status(
+        &self,
+        status: MessageStatus,
+    ) -> Result<Vec<models::Message>, Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        let results = dsl::messages
+            .filter(schema::messages::status.eq(status.to_string()))
+            .load::<models::Message>(&mut conn)?;
+        Ok(results)
+    }
 }

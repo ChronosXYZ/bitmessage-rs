@@ -36,6 +36,17 @@ pub trait MessageRepository {
         hash: String,
         status: MessageStatus,
     ) -> Result<(), Box<dyn Error>>;
+
+    async fn update_model(
+        &mut self,
+        hash: String,
+        model: models::Message,
+    ) -> Result<(), Box<dyn Error>>;
+
+    async fn get_messages_by_status(
+        &self,
+        status: MessageStatus,
+    ) -> Result<Vec<models::Message>, Box<dyn Error>>;
 }
 
 pub type MessageRepositorySync = dyn MessageRepository + Sync + Send;

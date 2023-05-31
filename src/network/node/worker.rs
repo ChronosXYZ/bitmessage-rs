@@ -1,3 +1,4 @@
+use async_std::task;
 use chrono::Utc;
 use diesel::{
     connection::SimpleConnection,
@@ -33,7 +34,9 @@ use crate::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
             BitmessageProtocolCodec, BitmessageResponse,
         },
-        messages::{self, MessageCommand, MessagePayload, MsgEncoding, ObjectKind, UnencryptedMsg},
+        messages::{
+            self, MessageCommand, MessagePayload, MsgEncoding, Object, ObjectKind, UnencryptedMsg,
+        },
     },
     repositories::{
         address::AddressRepositorySync,
@@ -510,29 +513,7 @@ impl NodeWorker {
                 match recipient {
                     Some(v) => {
                         msg.status = MessageStatus::WaitingForPOW.to_string();
-                        let unenc_msg = UnencryptedMsg {
-                            behavior_bitfield: 0,
-                            sender_ripe: msg.sender.clone(),
-                            destination_ripe: msg.recipient.clone(),
-                            encoding: MsgEncoding::Simple,
-                            message: msg.data.clone(),
-                            public_encryption_key: v
-                                .public_encryption_key
-                                .unwrap()
-                                .serialize()
-                                .to_vec(),
-                            public_signing_key: v.public_signing_key.unwrap().serialize().to_vec(),
-                        };
-                        let encrypted = Self::serialize_and_encrypt_payload_pub(
-                            unenc_msg,
-                            &v.public_encryption_key.unwrap(),
-                        );
-                        let object = messages::Object::with_signing(
-                            &identity,
-                            ObjectKind::Msg { encrypted },
-                            Utc::now() + chrono::Duration::days(7),
-                        );
-
+                        let object = create_object_from_msg(&identity, &v, msg.clone());
                         msg.hash = bs58::encode(&object.hash).into_string();
                         self.messages_repo.save_model(msg.clone()).await.unwrap();
                         object.do_proof_of_work(self.command_sender.clone());
@@ -588,6 +569,30 @@ impl NodeWorker {
     async fn handle_pubkey_notification(&mut self, tag: String) {
         if let Some(_) = self.tracked_pubkeys.get(&tag) {
             // TODO seek for messages which haven't been sent yet because of empty public key of recipient
+            let addr = self
+                .address_repo
+                .get_by_ripe_or_tag(tag)
+                .await
+                .unwrap()
+                .expect("Address entity exists in db");
+            let msgs = self
+                .messages_repo
+                .get_messages_by_recipient(addr.string_repr.clone())
+                .await
+                .unwrap();
+            msgs.into_iter()
+                .filter(|x| x.status == MessageStatus::WaitingForPubkey.to_string())
+                .for_each(|mut x| {
+                    let identity =
+                        task::block_on(self.address_repo.get_by_ripe_or_tag(x.sender.clone()))
+                            .unwrap()
+                            .expect("identity exists in address repo");
+                    x.status = MessageStatus::WaitingForPOW.to_string();
+                    let object = create_object_from_msg(&identity, &addr, x.clone());
+                    x.hash = bs58::encode(&object.hash).into_string();
+                    task::block_on(self.messages_repo.save_model(x)).unwrap();
+                    object.do_proof_of_work(self.command_sender.clone());
+                });
         }
     }
 
@@ -635,21 +640,6 @@ impl NodeWorker {
         .unwrap();
         encrypted
     }
-
-    pub fn serialize_and_encrypt_payload_pub<T>(
-        object: T,
-        public_key: &libsecp256k1::PublicKey,
-    ) -> Vec<u8>
-    where
-        T: Serialize,
-    {
-        let encrypted = ecies::encrypt(
-            &public_key.serialize(),
-            serde_cbor::to_vec(&object).unwrap().as_ref(),
-        )
-        .unwrap();
-        encrypted
-    }
 }
 
 fn extract_peer_id_from_multiaddr(
@@ -661,4 +651,42 @@ fn extract_peer_id_from_multiaddr(
         }),
         _ => Err("Multiaddr does not contain peer_id".into()),
     }
+}
+
+fn create_object_from_msg(identity: &Address, recipient: &Address, msg: models::Message) -> Object {
+    let unenc_msg = UnencryptedMsg {
+        behavior_bitfield: 0,
+        sender_ripe: msg.sender.clone(),
+        destination_ripe: msg.recipient.clone(),
+        encoding: MsgEncoding::Simple,
+        message: msg.data.clone(),
+        public_encryption_key: recipient
+            .public_encryption_key
+            .unwrap()
+            .serialize()
+            .to_vec(),
+        public_signing_key: identity.public_signing_key.unwrap().serialize().to_vec(),
+    };
+    let encrypted =
+        serialize_and_encrypt_payload_pub(unenc_msg, &recipient.public_encryption_key.unwrap());
+    messages::Object::with_signing(
+        &identity,
+        ObjectKind::Msg { encrypted },
+        Utc::now() + chrono::Duration::days(7), // FIXME
+    )
+}
+
+pub fn serialize_and_encrypt_payload_pub<T>(
+    object: T,
+    public_key: &libsecp256k1::PublicKey,
+) -> Vec<u8>
+where
+    T: Serialize,
+{
+    let encrypted = ecies::encrypt(
+        &public_key.serialize(),
+        serde_cbor::to_vec(&object).unwrap().as_ref(),
+    )
+    .unwrap();
+    encrypted
 }

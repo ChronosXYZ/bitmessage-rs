@@ -55,6 +55,7 @@ impl FactoryComponent for IdentityListRow {
             #[watch]
             set_title: &self.label.to_string(),
             set_subtitle: &self.address.to_string(),
+            set_subtitle_selectable: true,
 
             #[name(identity_avatar)]
             add_prefix = &gtk::Image {},

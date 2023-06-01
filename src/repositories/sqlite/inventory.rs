@@ -55,7 +55,7 @@ impl InventoryRepository for SqliteInventoryRepository {
         let model = &obj[0];
         let kind: ObjectKind =
             serde_cbor::from_slice(&model.data).expect("data not to be malformed");
-        let nonce = u64::from_le_bytes(model.nonce.clone().try_into().unwrap());
+        let nonce = u128::from_le_bytes(model.nonce.clone().try_into().unwrap());
 
         Ok(Some(Object {
             hash: bs58::decode(&hash).into_vec().unwrap(),

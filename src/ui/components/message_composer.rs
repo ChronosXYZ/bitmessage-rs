@@ -223,6 +223,7 @@ impl AsyncComponent for MessageComposer {
         dropdown.set_factory(Some(&factory));
         let s = sender.clone();
         dropdown.connect_selected_notify(move |x| {
+            log::debug!("selected item");
             let obj = x
                 .selected_item()
                 .unwrap()

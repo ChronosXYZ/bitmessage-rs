@@ -18,6 +18,7 @@ struct MessagesListItem {
     date: chrono::NaiveDateTime,
     from: String,
     body: String,
+    status: String,
 }
 
 struct MessagesListItemWidgets {
@@ -48,6 +49,7 @@ impl RelmListItem for MessagesListItem {
                 .set_text(&self.date.format("%Y-%m-%d %H:%M:%S").to_string()), // Date
             1 => widgets.label.set_text(&self.from),  // From
             2 => widgets.label.set_text(&self.title), // Title
+            3 => widgets.label.set_text(&self.status),
             _ => {}
         }
     }
@@ -156,6 +158,7 @@ impl AsyncComponent for MessagesContent {
             "Date".to_string(),
             "From".to_string(),
             "Title".to_string(),
+            "Status".to_string(),
         ]);
 
         let mut model = Self {
@@ -208,6 +211,7 @@ impl AsyncComponent for MessagesContent {
                         date,
                         from,
                         body: body.to_string(),
+                        status: m.status,
                     });
                 }
             }

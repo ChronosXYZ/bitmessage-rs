@@ -9,12 +9,12 @@ use std::usize;
 use gtk::prelude::{Cast, CastNone, IsA, ListModelExt, ObjectExt, StaticType};
 use gtk::{gio, glib};
 
-fn get_value<T: 'static>(obj: &glib::Object) -> Ref<'_, T> {
+pub fn get_value<T: 'static>(obj: &glib::Object) -> Ref<'_, T> {
     let wrapper = obj.downcast_ref::<glib::BoxedAnyObject>().unwrap();
     wrapper.borrow()
 }
 
-fn get_mut_value<T: 'static>(obj: &glib::Object) -> RefMut<'_, T> {
+pub fn get_mut_value<T: 'static>(obj: &glib::Object) -> RefMut<'_, T> {
     let wrapper = obj.downcast_ref::<glib::BoxedAnyObject>().unwrap();
     wrapper.borrow_mut()
 }

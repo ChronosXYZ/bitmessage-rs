@@ -93,8 +93,10 @@ impl AsyncComponent for MessagesContent {
 
                             #[wrap(Some)]
                             set_start_child = &gtk::Frame {
-                                #[local_ref]
-                                messages_list -> gtk::ColumnView {},
+                                gtk::ScrolledWindow {
+                                    #[local_ref]
+                                    messages_list -> gtk::ColumnView {},
+                                }
                             },
                             #[wrap(Some)]
                             set_end_child = &gtk::Frame {
@@ -183,6 +185,7 @@ impl AsyncComponent for MessagesContent {
     ) {
         match message {
             MessagesContentInput::FolderSelected(selected_folder) => {
+                self.messages_list_view.clear();
                 self.selected_folder = Some(selected_folder.clone());
                 let folder = match selected_folder.folder.as_str() {
                     "Inbox" => Folder::Inbox,

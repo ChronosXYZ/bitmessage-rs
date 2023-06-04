@@ -105,7 +105,7 @@ impl Object {
 pub enum MessagePayload {
     GetData { inventory: InventoryVector },
     Inv { inventory: InventoryVector },
-    Objects(Vec<Object>),
+    Objects { objects: Vec<Object> },
     None,
 }
 

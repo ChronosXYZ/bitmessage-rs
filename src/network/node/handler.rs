@@ -100,8 +100,8 @@ impl Handler {
     }
 
     async fn handle_objects(&mut self, payload: MessagePayload) {
-        let objects: Vec<Object> = if let MessagePayload::Objects(obj) = payload {
-            obj
+        let objects: Vec<Object> = if let MessagePayload::Objects { objects } = payload {
+            objects
         } else {
             log::warn!("incorrent payload passed to handle_object function");
             return;
@@ -340,7 +340,7 @@ impl Handler {
 
         NetworkMessage {
             command: MessageCommand::Objects,
-            payload: MessagePayload::Objects(objects),
+            payload: MessagePayload::Objects { objects },
         }
     }
 }

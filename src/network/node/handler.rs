@@ -1,12 +1,10 @@
-use std::{error::Error, sync::Arc};
+use std::error::Error;
 
 use chrono::Utc;
 use futures::{
     channel::{mpsc, oneshot},
-    lock::Mutex,
     SinkExt,
 };
-use libp2p::PeerId;
 use num_bigint::BigUint;
 
 use crate::{
@@ -27,7 +25,7 @@ use super::worker::WorkerCommand;
 
 pub struct Handler {
     address_repo: Box<AddressRepositorySync>,
-    inventory_repo: Arc<Mutex<Box<InventoryRepositorySync>>>,
+    inventory_repo: Box<InventoryRepositorySync>,
     message_repo: Box<MessageRepositorySync>,
     requested_objects: Vec<String>, // TODO periodically request missing object from every connection we have
     worker_event_sender: mpsc::Sender<WorkerCommand>,
@@ -44,7 +42,7 @@ impl Handler {
     ) -> Handler {
         Handler {
             address_repo,
-            inventory_repo: Arc::new(Mutex::new(inventory_repo)),
+            inventory_repo,
             message_repo,
             requested_objects: Vec::new(),
             worker_event_sender,
@@ -67,8 +65,6 @@ impl Handler {
     async fn handle_get_inv_message(&self, _: MessagePayload) -> NetworkMessage {
         let inv = self
             .inventory_repo
-            .lock()
-            .await
             .get()
             .await
             .expect("Inventory repo not to fail");
@@ -85,8 +81,6 @@ impl Handler {
             Vec::new()
         };
         self.inventory_repo
-            .lock()
-            .await
             .get_missing_objects(&mut inv)
             .await
             .expect("Repo not to fail");
@@ -113,8 +107,6 @@ impl Handler {
 
             if self
                 .inventory_repo
-                .lock()
-                .await
                 .get_object(hash_str.clone())
                 .await
                 .unwrap()
@@ -140,8 +132,6 @@ impl Handler {
             }
 
             self.inventory_repo
-                .lock()
-                .await
                 .store_object(hash_str, obj.clone())
                 .await
                 .expect("repo not to fail");
@@ -296,8 +286,6 @@ impl Handler {
     async fn offer_inv(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let inventory = self
             .inventory_repo
-            .lock()
-            .await
             .get()
             .await
             .expect("repo not to be failed");
@@ -326,8 +314,6 @@ impl Handler {
         for hash in inv {
             if let Some(obj) = self
                 .inventory_repo
-                .lock()
-                .await
                 .get_object(hash)
                 .await
                 .expect("Repository not to fail")

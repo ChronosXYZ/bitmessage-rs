@@ -101,7 +101,7 @@ impl Object {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
+#[serde(tag = "kind")]
 pub enum MessagePayload {
     GetData { inventory: InventoryVector },
     Inv { inventory: InventoryVector },

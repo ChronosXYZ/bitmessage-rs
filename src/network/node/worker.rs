@@ -7,9 +7,7 @@ use diesel::{
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use rand::distributions::{Alphanumeric, DistString};
-use std::{
-    borrow::Cow, collections::HashMap, error::Error, fs, io, iter, sync::RwLock, time::Duration,
-};
+use std::{borrow::Cow, collections::HashMap, error::Error, fs, io, iter, time::Duration};
 
 use directories::ProjectDirs;
 use futures::{
@@ -22,7 +20,7 @@ use libp2p::{
     identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     mdns, noise,
-    request_response::{self, ProtocolSupport, RequestId},
+    request_response::{self, ProtocolSupport},
     swarm::{derive_prelude::Either, ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Swarm, Transport,
 };
@@ -153,7 +151,7 @@ pub struct NodeWorker {
     command_receiver: mpsc::Receiver<WorkerCommand>,
 
     pubkey_notifier: mpsc::Receiver<String>,
-    tracked_pubkeys: HashMap<String, bool>, // TODO populate it on startup
+    tracked_pubkeys: HashMap<String, bool>,
 
     pending_commands: Vec<WorkerCommand>,
     _sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
@@ -266,6 +264,7 @@ impl NodeWorker {
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));
         let message_repo = Box::new(SqliteMessageRepository::new(pool.clone()));
+
         (
             Self {
                 local_peer_id,
@@ -563,6 +562,15 @@ impl NodeWorker {
     }
 
     pub async fn run(mut self) {
+        let msgs_waiting_for_pubkey = self
+            .messages_repo
+            .get_messages_by_status(MessageStatus::WaitingForPubkey)
+            .await
+            .unwrap();
+        for m in msgs_waiting_for_pubkey {
+            self.tracked_pubkeys.insert(m.recipient, true);
+        }
+
         log::debug!("node worker event loop started");
         loop {
             select! {
@@ -582,7 +590,6 @@ impl NodeWorker {
 
     async fn handle_pubkey_notification(&mut self, tag: String) {
         if let Some(_) = self.tracked_pubkeys.get(&tag) {
-            // TODO seek for messages which haven't been sent yet because of empty public key of recipient
             let addr = self
                 .address_repo
                 .get_by_ripe_or_tag(tag)
@@ -661,7 +668,7 @@ impl NodeWorker {
     }
 
     fn on_new_peer(&mut self, peer_id: PeerId) {
-        let req_id = self.swarm.behaviour_mut().rpc.send_request(
+        self.swarm.behaviour_mut().rpc.send_request(
             &peer_id,
             BitmessageRequest(messages::NetworkMessage {
                 command: MessageCommand::ReqInv,

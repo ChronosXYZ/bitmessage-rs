@@ -6,6 +6,7 @@ use futures::{
     lock::Mutex,
     SinkExt,
 };
+use libp2p::PeerId;
 use num_bigint::BigUint;
 
 use crate::{

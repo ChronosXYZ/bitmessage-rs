@@ -32,7 +32,7 @@ use crate::{
         address::Address,
         behaviour::{
             BitmessageBehaviourEvent, BitmessageNetBehaviour, BitmessageProtocol,
-            BitmessageProtocolCodec, BitmessageResponse,
+            BitmessageProtocolCodec, BitmessageRequest, BitmessageResponse,
         },
         messages::{
             self, MessageCommand, MessagePayload, MsgEncoding, Object, ObjectKind, UnencryptedMsg,
@@ -365,6 +365,7 @@ impl NodeWorker {
                         .behaviour_mut()
                         .gossipsub
                         .add_explicit_peer(&peer_id);
+                    self.on_new_peer(peer_id.clone());
                 }
             }
             _ => {}
@@ -648,6 +649,16 @@ impl NodeWorker {
         )
         .unwrap();
         encrypted
+    }
+
+    fn on_new_peer(&mut self, peer_id: PeerId) {
+        self.swarm.behaviour_mut().rpc.send_request(
+            &peer_id,
+            BitmessageRequest(messages::NetworkMessage {
+                command: MessageCommand::ReqInv,
+                payload: MessagePayload::None,
+            }),
+        );
     }
 }
 

@@ -35,7 +35,8 @@ use crate::{
             BitmessageProtocolCodec, BitmessageRequest, BitmessageResponse,
         },
         messages::{
-            self, MessageCommand, MessagePayload, MsgEncoding, Object, ObjectKind, UnencryptedMsg,
+            self, MessageCommand, MessagePayload, MsgEncoding, NetworkMessage, Object, ObjectKind,
+            UnencryptedMsg,
         },
     },
     repositories::{
@@ -375,6 +376,19 @@ impl NodeWorker {
                         .add_explicit_peer(&peer_id);
                     self.on_new_peer(peer_id.clone());
                 }
+            }
+            SwarmEvent::Behaviour(BitmessageBehaviourEvent::Gossipsub(
+                gossipsub::Event::Message {
+                    propagation_source: _,
+                    message_id: _,
+                    message,
+                },
+            )) => {
+                if message.topic != self.common_topic.hash() {
+                    return;
+                }
+                let msg: NetworkMessage = serde_cbor::from_slice(&message.data).unwrap();
+                self.handler.handle_message(msg).await;
             }
             _ => {}
         }

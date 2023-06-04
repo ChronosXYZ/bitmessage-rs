@@ -37,7 +37,7 @@ impl InventoryRepository for SqliteInventoryRepository {
     async fn get(&self) -> Result<Vec<String>, Box<dyn Error>> {
         let mut conn = self.connection_pool.get().unwrap();
         let results = dsl::inventory
-            .filter(schema::inventory::expires.le(Utc::now().naive_utc()))
+            .filter(schema::inventory::expires.gt(Utc::now().naive_utc()))
             .select(schema::inventory::hash)
             .load::<String>(&mut conn)?;
         Ok(results)

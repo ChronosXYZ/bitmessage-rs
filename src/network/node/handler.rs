@@ -336,6 +336,8 @@ impl Handler {
             }
         }
 
+        log::debug!("requested {} objects from this node", objects.len());
+
         NetworkMessage {
             command: MessageCommand::Objects,
             payload: MessagePayload::Objects(objects),

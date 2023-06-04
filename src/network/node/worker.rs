@@ -7,7 +7,9 @@ use diesel::{
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use rand::distributions::{Alphanumeric, DistString};
-use std::{borrow::Cow, collections::HashMap, error::Error, fs, io, iter, time::Duration};
+use std::{
+    borrow::Cow, collections::HashMap, error::Error, fs, io, iter, sync::RwLock, time::Duration,
+};
 
 use directories::ProjectDirs;
 use futures::{
@@ -20,7 +22,7 @@ use libp2p::{
     identify, identity,
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     mdns, noise,
-    request_response::{self, ProtocolSupport},
+    request_response::{self, ProtocolSupport, RequestId},
     swarm::{derive_prelude::Either, ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Swarm, Transport,
 };
@@ -327,7 +329,7 @@ impl NodeWorker {
                 }
             }
             SwarmEvent::Behaviour(BitmessageBehaviourEvent::RequestResponse(
-                request_response::Event::Message { message, .. },
+                request_response::Event::Message { message, peer, .. },
             )) => match message {
                 request_response::Message::Request {
                     request_id,
@@ -347,6 +349,13 @@ impl NodeWorker {
                     response,
                 } => {
                     debug!("received response on {request_id}: {:?}", response);
+                    let another_request = self.handler.handle_message(response.0).await;
+                    if let Some(m) = another_request {
+                        self.swarm
+                            .behaviour_mut()
+                            .rpc
+                            .send_request(&peer, BitmessageRequest(m));
+                    }
                 }
             },
             SwarmEvent::Behaviour(BitmessageBehaviourEvent::Identify(e)) => {
@@ -652,7 +661,7 @@ impl NodeWorker {
     }
 
     fn on_new_peer(&mut self, peer_id: PeerId) {
-        self.swarm.behaviour_mut().rpc.send_request(
+        let req_id = self.swarm.behaviour_mut().rpc.send_request(
             &peer_id,
             BitmessageRequest(messages::NetworkMessage {
                 command: MessageCommand::ReqInv,

@@ -259,7 +259,7 @@ impl NodeWorker {
             .subscribe(&topic)
             .expect("subscription not to fail");
 
-        let (sender, receiver) = mpsc::channel(0);
+        let (sender, receiver) = mpsc::channel(3);
         let (pubkey_notifier_sink, pubkey_notifier) = mpsc::channel(0);
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));

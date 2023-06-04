@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use async_std::task;
 use chrono::Utc;
 use futures::{
     channel::{mpsc, oneshot},
@@ -136,7 +137,7 @@ impl Handler {
                 .await
                 .expect("repo not to fail");
 
-            self.offer_inv().await.expect("inv msg to be published");
+            self.offer_inv().await;
 
             let handler_result = match &obj.kind {
                 ObjectKind::Msg { encrypted: _ } => self.handle_msg_object(obj.clone()).await,
@@ -283,7 +284,7 @@ impl Handler {
         Ok(())
     }
 
-    async fn offer_inv(&mut self) -> Result<(), Box<dyn Error + Send>> {
+    async fn offer_inv(&mut self) {
         let inventory = self
             .inventory_repo
             .get()
@@ -299,7 +300,12 @@ impl Handler {
             .send(WorkerCommand::BroadcastMsgByPubSub { sender, msg })
             .await
             .expect("receiver not to be dropped");
-        receiver.await.unwrap()
+        task::spawn(async move {
+            receiver
+                .await
+                .unwrap()
+                .expect("msg to be published in pubsub");
+        });
     }
 
     async fn handle_get_data(&self, payload: MessagePayload) -> NetworkMessage {

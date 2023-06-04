@@ -412,7 +412,6 @@ dependencies = [
  "erased-serde",
  "futures 0.3.28",
  "gtk4",
- "hmac-sha512",
  "identicon-rs",
  "libadwaita",
  "libp2p",
@@ -1864,12 +1863,6 @@ dependencies = [
  "generic-array",
  "hmac 0.8.1",
 ]
-
-[[package]]
-name = "hmac-sha512"
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520c9c3f6040661669bc5c91e551b605a520c8e0a63a766a91a65adef734d151"
 
 [[package]]
 name = "hostname"

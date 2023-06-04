@@ -361,6 +361,10 @@ impl NodeWorker {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, multiaddr);
+                    self.swarm
+                        .behaviour_mut()
+                        .gossipsub
+                        .add_explicit_peer(&peer_id);
                 }
             }
             _ => {}
@@ -622,6 +626,11 @@ impl NodeWorker {
                         .kademlia
                         .add_address(&peer_id, addr);
                 }
+
+                self.swarm
+                    .behaviour_mut()
+                    .gossipsub
+                    .add_explicit_peer(&peer_id);
             }
         }
     }

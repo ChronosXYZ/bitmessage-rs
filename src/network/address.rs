@@ -1,7 +1,7 @@
 use ecies::{PublicKey, SecretKey};
-use hmac_sha512::Hash;
 use rand::rngs::OsRng;
 use ripemd::{Digest, Ripemd160};
+use sha2::Sha512;
 
 #[derive(Clone, Debug)]
 pub struct Address {
@@ -18,7 +18,7 @@ pub struct Address {
 
 impl Address {
     pub fn new(ripe: Vec<u8>) -> Self {
-        let checksum = Hash::hash(Hash::hash(&ripe));
+        let checksum = Sha512::digest(Sha512::digest(&ripe));
         let public_decryption_key = SecretKey::parse_slice(&checksum[..32]).unwrap();
         let tag = checksum[32..].to_vec();
 
@@ -41,7 +41,7 @@ impl Address {
         public_signing_key: PublicKey,
         public_encryption_key: PublicKey,
     ) -> Self {
-        let mut hasher = Hash::new();
+        let mut hasher = Sha512::new();
         let mut ripemd160 = Ripemd160::new();
         hasher.update(public_signing_key.serialize());
         hasher.update(public_encryption_key.serialize());

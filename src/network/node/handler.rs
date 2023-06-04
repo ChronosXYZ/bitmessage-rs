@@ -6,6 +6,7 @@ use futures::{
     lock::Mutex,
     SinkExt,
 };
+use num_bigint::BigUint;
 
 use crate::{
     network::{
@@ -127,7 +128,8 @@ impl Handler {
                 pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,
                 pow::NETWORK_MIN_EXTRA_BYTES,
             );
-            let pow_check_res = pow::check_pow(target, obj.nonce.clone(), obj.hash.clone());
+            let pow_check_res =
+                pow::check_pow(target, BigUint::from_bytes_be(&obj.nonce), obj.hash.clone());
             if pow_check_res.is_err() {
                 log::warn!(
                     "object with hash {:?} has invalid nonce! skipping it",

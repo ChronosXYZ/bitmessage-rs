@@ -34,7 +34,7 @@ impl ObjectKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Object {
     pub hash: Vec<u8>,
-    pub nonce: u128,
+    pub nonce: Vec<u8>,
     pub expires: i64,
     pub signature: Vec<u8>,
     pub kind: ObjectKind,
@@ -52,7 +52,7 @@ impl Object {
         let hash: &[u8] = result.as_ref();
         Self {
             hash: hash.to_vec(),
-            nonce: 0,
+            nonce: Vec::new(),
             expires,
             signature,
             kind,
@@ -89,7 +89,7 @@ impl Object {
         task::spawn((move || async move {
             pow::do_pow(target, self.hash.clone())
                 .then(move |(_, nonce)| async move {
-                    self.nonce = nonce;
+                    self.nonce = nonce.to_bytes_be();
                     worker_sink
                         .send(WorkerCommand::NonceCalculated { obj: self })
                         .await

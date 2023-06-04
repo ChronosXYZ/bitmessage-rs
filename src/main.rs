@@ -15,7 +15,7 @@ fn main() {
 
     task::spawn(worker.run());
 
-    task::block_on(client.start_listening("/ip4/0.0.0.0/tcp/0".parse().unwrap()))
+    task::block_on(client.start_listening("/ip4/0.0.0.0/tcp/34064".parse().unwrap()))
         .expect("listening not to fail");
 
     state::STATE.write_inner().client = Some(client);

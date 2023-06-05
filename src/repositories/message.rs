@@ -47,6 +47,8 @@ pub trait MessageRepository {
         &self,
         status: MessageStatus,
     ) -> Result<Vec<models::Message>, Box<dyn Error>>;
+
+    async fn remove_message(&mut self, hash: String) -> Result<(), Box<dyn Error>>;
 }
 
 pub type MessageRepositorySync = dyn MessageRepository + Sync + Send;

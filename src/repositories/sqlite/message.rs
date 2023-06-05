@@ -124,4 +124,10 @@ impl MessageRepository for SqliteMessageRepository {
             .load::<models::Message>(&mut conn)?;
         Ok(results)
     }
+
+    async fn remove_message(&mut self, hash: String) -> Result<(), Box<dyn Error>> {
+        let mut conn = self.connection_pool.get().unwrap();
+        diesel::delete(dsl::messages.filter(schema::messages::hash.eq(hash))).execute(&mut conn)?;
+        Ok(())
+    }
 }

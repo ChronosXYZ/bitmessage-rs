@@ -582,7 +582,15 @@ impl NodeWorker {
             .await
             .unwrap();
         for m in msgs_waiting_for_pubkey {
-            let tag = bs58::encode(self.address_repo.get_by_ripe_or_tag(m.recipient).await.unwrap().unwrap().tag).into_string();
+            let tag = bs58::encode(
+                self.address_repo
+                    .get_by_ripe_or_tag(m.recipient)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .tag,
+            )
+            .into_string();
             self.tracked_pubkeys.insert(tag, true);
         }
 
@@ -625,8 +633,9 @@ impl NodeWorker {
                             .expect("identity exists in address repo");
                     x.status = MessageStatus::WaitingForPOW.to_string();
                     let object = create_object_from_msg(&identity, &addr, x.clone());
+                    let old_hash = x.hash.clone();
                     x.hash = bs58::encode(&object.hash).into_string();
-                    task::block_on(self.messages_repo.save_model(x)).unwrap();
+                    task::block_on(self.messages_repo.update_model(old_hash, x)).unwrap();
                     object.do_proof_of_work(self.command_sender.clone());
                 });
         }

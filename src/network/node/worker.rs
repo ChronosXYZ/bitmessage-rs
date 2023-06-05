@@ -546,6 +546,8 @@ impl NodeWorker {
                         object.do_proof_of_work(self.command_sender.clone());
                     }
                     None => {
+                        let recipient_address = Address::with_string_repr(msg.recipient.clone());
+                        self.address_repo.store(recipient_address).await.unwrap();
                         msg.status = MessageStatus::WaitingForPubkey.to_string();
                         // we generate random hash value, cuz we don't really know real hash value of the message at the moment, and it's not that important
                         msg.hash = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);

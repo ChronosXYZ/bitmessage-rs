@@ -8,6 +8,7 @@ use diesel::{
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use rand::distributions::{Alphanumeric, DistString};
 use std::{borrow::Cow, collections::HashMap, error::Error, fs, io, iter, time::Duration};
+use void::Void;
 
 use directories::ProjectDirs;
 use futures::{
@@ -21,7 +22,9 @@ use libp2p::{
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     mdns, noise,
     request_response::{self, ProtocolSupport},
-    swarm::{derive_prelude::Either, ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent},
+    swarm::{
+        derive_prelude::Either, keep_alive, ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent,
+    },
     tcp, yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use log::{debug, info};
@@ -205,6 +208,7 @@ impl NodeWorker {
                 )),
                 mdns: mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)
                     .unwrap(),
+                keep_alive: keep_alive::Behaviour::default(),
             },
             local_peer_id,
         )
@@ -299,10 +303,13 @@ impl NodeWorker {
             BitmessageBehaviourEvent,
             Either<
                 Either<
-                    Either<Either<void::Void, io::Error>, io::Error>,
-                    ConnectionHandlerUpgrErr<io::Error>,
+                    Either<
+                        Either<Either<Void, io::Error>, io::Error>,
+                        ConnectionHandlerUpgrErr<io::Error>,
+                    >,
+                    Void,
                 >,
-                void::Void,
+                Void,
             >,
         >,
     ) {

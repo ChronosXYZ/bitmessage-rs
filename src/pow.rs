@@ -1,5 +1,3 @@
-use std::{sync::Arc, thread::available_parallelism};
-
 use async_std::task::{self, JoinHandle};
 use chrono::Utc;
 use futures::{

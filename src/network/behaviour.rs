@@ -8,10 +8,11 @@ use libp2p::{
     kad::{record::store::MemoryStore, Kademlia, KademliaEvent},
     mdns,
     request_response::{self, Codec, ProtocolName},
-    swarm::NetworkBehaviour,
+    swarm::{keep_alive, NetworkBehaviour},
 };
 use log::error;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use void::Void;
 
 #[derive(Debug, Clone)]
 pub struct BitmessageProtocol();
@@ -134,6 +135,7 @@ pub struct BitmessageNetBehaviour {
     pub kademlia: Kademlia<MemoryStore>,
     pub rpc: request_response::Behaviour<BitmessageProtocolCodec>,
     pub mdns: mdns::async_io::Behaviour,
+    pub keep_alive: keep_alive::Behaviour,
 }
 
 #[derive(Debug)]
@@ -143,6 +145,7 @@ pub enum BitmessageBehaviourEvent {
     Identify(identify::Event),
     Gossipsub(gossipsub::Event),
     Mdns(mdns::Event),
+    Void,
 }
 
 impl From<request_response::Event<BitmessageRequest, BitmessageResponse>>
@@ -174,5 +177,11 @@ impl From<gossipsub::Event> for BitmessageBehaviourEvent {
 impl From<mdns::Event> for BitmessageBehaviourEvent {
     fn from(value: mdns::Event) -> Self {
         BitmessageBehaviourEvent::Mdns(value)
+    }
+}
+
+impl From<Void> for BitmessageBehaviourEvent {
+    fn from(value: Void) -> Self {
+        BitmessageBehaviourEvent::Void
     }
 }

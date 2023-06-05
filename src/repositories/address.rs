@@ -24,7 +24,7 @@ pub trait AddressRepository {
 
     async fn update_public_keys(
         &mut self,
-        ripe: String,
+        hash: String,
         public_signing_key: PublicKey,
         public_encryption_key: PublicKey,
     ) -> Result<(), Box<dyn Error>>;

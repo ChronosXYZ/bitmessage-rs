@@ -159,19 +159,24 @@ impl AddressRepository for SqliteAddressRepository {
 
     async fn update_public_keys(
         &mut self,
-        ripe: String,
+        hash: String,
         public_signing_key: PublicKey,
         public_encryption_key: PublicKey,
     ) -> Result<(), Box<dyn Error>> {
         let mut conn = self.connection_pool.get().unwrap();
-        diesel::update(dsl::addresses.filter(schema::addresses::address.eq(ripe)))
-            .set((
-                schema::addresses::public_signing_key
-                    .eq(Some(public_signing_key.serialize().to_vec())),
-                schema::addresses::public_encryption_key
-                    .eq(Some(public_encryption_key.serialize().to_vec())),
-            ))
-            .execute(&mut conn)?;
+        diesel::update(
+            dsl::addresses.filter(
+                schema::addresses::address
+                    .eq(&hash)
+                    .or(schema::addresses::tag.eq(&hash)),
+            ),
+        )
+        .set((
+            schema::addresses::public_signing_key.eq(Some(public_signing_key.serialize().to_vec())),
+            schema::addresses::public_encryption_key
+                .eq(Some(public_encryption_key.serialize().to_vec())),
+        ))
+        .execute(&mut conn)?;
         Ok(())
     }
 

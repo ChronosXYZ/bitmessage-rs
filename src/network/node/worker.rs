@@ -261,7 +261,7 @@ impl NodeWorker {
             .expect("subscription not to fail");
 
         let (sender, receiver) = mpsc::channel(3);
-        let (pubkey_notifier_sink, pubkey_notifier) = mpsc::channel(0);
+        let (pubkey_notifier_sink, pubkey_notifier) = mpsc::channel(3);
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));
         let message_repo = Box::new(SqliteMessageRepository::new(pool.clone()));
@@ -582,7 +582,8 @@ impl NodeWorker {
             .await
             .unwrap();
         for m in msgs_waiting_for_pubkey {
-            self.tracked_pubkeys.insert(m.recipient, true);
+            let tag = bs58::encode(self.address_repo.get_by_ripe_or_tag(m.recipient).await.unwrap().unwrap().tag).into_string();
+            self.tracked_pubkeys.insert(tag, true);
         }
 
         log::debug!("node worker event loop started");

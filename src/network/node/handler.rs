@@ -178,11 +178,17 @@ impl Handler {
                 let dec_result = ecies::decrypt(&a.public_decryption_key.serialize(), &encrypted);
                 dec_result
             }
-            None => return Ok(()), // just ignore it
+            None => {
+                log::debug!("no such address with tag {} in local db", tag_str);
+                return Ok(());
+            } // just ignore it
         };
         let data: UnencryptedPubkey = match decryption_result {
             Ok(d) => serde_cbor::from_slice(&d).expect("pubkey msg in correct format!"),
-            Err(_) => return Ok(()), // just ignore it
+            Err(_) => {
+                log::debug!("failed to decrypt pubkey object with tag {}", tag_str);
+                return Ok(());
+            } // just ignore it
         };
 
         self.address_repo

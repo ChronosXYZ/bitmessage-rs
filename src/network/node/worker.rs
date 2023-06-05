@@ -654,6 +654,9 @@ impl NodeWorker {
             obj.do_proof_of_work(self.command_sender.clone());
         }
 
+        // cleanup expired objects from the storage
+        self.inventory_repo.cleanup().await.unwrap();
+
         log::debug!("node worker event loop started");
         loop {
             select! {

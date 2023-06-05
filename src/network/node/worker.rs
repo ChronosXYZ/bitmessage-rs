@@ -335,6 +335,20 @@ impl NodeWorker {
                     }
                 }
             }
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                endpoint,
+                num_established,
+                cause,
+            } => {
+                if num_established == 0 {
+                    self.swarm
+                        .behaviour_mut()
+                        .gossipsub
+                        .remove_explicit_peer(&peer_id);
+                    self.swarm.behaviour_mut().kademlia.remove_peer(&peer_id);
+                }
+            }
             SwarmEvent::Behaviour(BitmessageBehaviourEvent::RequestResponse(
                 request_response::Event::Message { message, peer, .. },
             )) => match message {

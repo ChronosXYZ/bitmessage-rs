@@ -62,7 +62,7 @@ impl RelmListItem for IdentityDropdownItem {
 }
 
 pub struct MessageComposer {
-    current_identity: IdentityDropdownItem,
+    current_identity: Option<IdentityDropdownItem>,
     to_buffer: gtk::EntryBuffer,
     subject_buffer: gtk::EntryBuffer,
     body_buffer: gtk::TextBuffer,
@@ -100,6 +100,8 @@ impl AsyncComponent for MessageComposer {
                     },
 
                     pack_end = &gtk::Button {
+                        #[watch]
+                        set_sensitive: !model.current_identity.is_none(),
                         set_label: "Send",
                         add_css_class: "suggested-action",
                         connect_clicked => MessageComposerInput::SendButtonClicked
@@ -158,11 +160,8 @@ impl AsyncComponent for MessageComposer {
         root: Self::Root,
         sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
-        let model = MessageComposer {
-            current_identity: IdentityDropdownItem {
-                label: String::new(),
-                address: String::new(),
-            },
+        let mut model = MessageComposer {
+            current_identity: None,
             to_buffer: gtk::EntryBuffer::new(Some("")),
             subject_buffer: gtk::EntryBuffer::new(Some("")),
             body_buffer: gtk::TextBuffer::new(None),
@@ -209,15 +208,16 @@ impl AsyncComponent for MessageComposer {
         });
 
         let store = gio::ListStore::new(BoxedAnyObject::static_type());
-        identities
-            .into_iter()
+        let items: Vec<IdentityDropdownItem> = identities
+            .iter()
             .map(|x| IdentityDropdownItem {
-                label: x.label,
-                address: x.string_repr,
+                label: x.label.clone(),
+                address: x.string_repr.clone(),
             })
-            .for_each(|x| {
-                store.append(&BoxedAnyObject::new(x));
-            });
+            .collect();
+        items.iter().for_each(|x| {
+            store.append(&BoxedAnyObject::new(x.clone()));
+        });
 
         let dropdown = gtk::DropDown::new(Some(store), gtk::Expression::NONE);
         dropdown.set_factory(Some(&factory));
@@ -232,6 +232,9 @@ impl AsyncComponent for MessageComposer {
             let item: Ref<IdentityDropdownItem> = obj.borrow();
             s.input(MessageComposerInput::IdentityItemSelected(item.clone()));
         });
+        if !items.is_empty() {
+            model.current_identity = Some(items[0].clone());
+        }
         let widgets = view_output!();
         AsyncComponentParts { model, widgets }
     }
@@ -263,7 +266,7 @@ impl AsyncComponent for MessageComposer {
                     .as_mut()
                     .unwrap()
                     .send_message(
-                        self.current_identity.address.clone(),
+                        self.current_identity.as_ref().unwrap().address.clone(),
                         self.to_buffer.text().to_string(),
                         self.subject_buffer.text().to_string(),
                         self.body_buffer
@@ -276,7 +279,7 @@ impl AsyncComponent for MessageComposer {
                     )
                     .await;
             }
-            MessageComposerInput::IdentityItemSelected(v) => self.current_identity = v,
+            MessageComposerInput::IdentityItemSelected(v) => self.current_identity = Some(v),
         }
     }
 }

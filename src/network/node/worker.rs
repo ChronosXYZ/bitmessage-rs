@@ -388,7 +388,13 @@ impl NodeWorker {
                     return;
                 }
                 let msg: NetworkMessage = serde_cbor::from_slice(&message.data).unwrap();
-                self.handler.handle_message(msg).await;
+                let reply = self.handler.handle_message(msg).await;
+                if let Some(m) = reply {
+                    self.swarm
+                        .behaviour_mut()
+                        .rpc
+                        .send_request(&message.source.unwrap(), BitmessageRequest(m));
+                }
             }
             _ => {}
         }
@@ -604,12 +610,19 @@ impl NodeWorker {
             .await
             .unwrap();
         for m in msgs_waiting_for_pow {
-            let obj = self
-                .inventory_repo
-                .get_object(m.hash)
+            let identity = self
+                .address_repo
+                .get_by_ripe_or_tag(m.sender.clone())
                 .await
                 .unwrap()
                 .unwrap();
+            let recipient = self
+                .address_repo
+                .get_by_ripe_or_tag(m.recipient.clone())
+                .await
+                .unwrap()
+                .unwrap();
+            let obj = create_object_from_msg(&identity, &recipient, m);
             obj.do_proof_of_work(self.command_sender.clone());
         }
 

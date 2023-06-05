@@ -576,6 +576,7 @@ impl NodeWorker {
     }
 
     pub async fn run(mut self) {
+        // populate tracked_pubkeys map
         let msgs_waiting_for_pubkey = self
             .messages_repo
             .get_messages_by_status(MessageStatus::WaitingForPubkey)
@@ -592,6 +593,22 @@ impl NodeWorker {
             )
             .into_string();
             self.tracked_pubkeys.insert(tag, true);
+        }
+
+        // restart proof of work for messages
+        let msgs_waiting_for_pow = self
+            .messages_repo
+            .get_messages_by_status(MessageStatus::WaitingForPOW)
+            .await
+            .unwrap();
+        for m in msgs_waiting_for_pow {
+            let obj = self
+                .inventory_repo
+                .get_object(m.hash)
+                .await
+                .unwrap()
+                .unwrap();
+            obj.do_proof_of_work(self.command_sender.clone());
         }
 
         log::debug!("node worker event loop started");

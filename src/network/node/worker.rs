@@ -547,8 +547,12 @@ impl NodeWorker {
                     Some(v) => {
                         msg.status = MessageStatus::WaitingForPOW.to_string();
                         let object = create_object_from_msg(&identity, &v, msg.clone());
+                        let old_hash = msg.hash.clone();
                         msg.hash = bs58::encode(&object.hash).into_string();
-                        self.messages_repo.save_model(msg.clone()).await.unwrap();
+                        self.messages_repo
+                            .update_model(old_hash, msg)
+                            .await
+                            .unwrap();
                         object.do_proof_of_work(self.command_sender.clone());
                     }
                     None => {
@@ -609,7 +613,7 @@ impl NodeWorker {
             .get_messages_by_status(MessageStatus::WaitingForPOW)
             .await
             .unwrap();
-        for m in msgs_waiting_for_pow {
+        for mut m in msgs_waiting_for_pow {
             let identity = self
                 .address_repo
                 .get_by_ripe_or_tag(m.sender.clone())
@@ -622,7 +626,10 @@ impl NodeWorker {
                 .await
                 .unwrap()
                 .unwrap();
-            let obj = create_object_from_msg(&identity, &recipient, m);
+            let obj = create_object_from_msg(&identity, &recipient, m.clone());
+            let old_hash = m.hash.clone();
+            m.hash = bs58::encode(&obj.hash).into_string();
+            self.messages_repo.update_model(old_hash, m).await.unwrap();
             obj.do_proof_of_work(self.command_sender.clone());
         }
 

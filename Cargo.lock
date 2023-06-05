@@ -420,6 +420,7 @@ dependencies = [
  "mail-parser",
  "multiaddr",
  "num-bigint",
+ "num_cpus",
  "once_cell",
  "pretty_env_logger",
  "rand 0.8.5",

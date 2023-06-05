@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use sha2::Digest;
 
-use crate::pow;
+use crate::pow::{self, AsyncPoW};
 
 use super::{address::Address, node::worker::WorkerCommand};
 
@@ -86,9 +86,10 @@ impl Object {
             pow::NETWORK_MIN_EXTRA_BYTES,
         );
 
-        task::spawn((move || async move {
-            pow::do_pow(target, self.hash.clone())
-                .then(move |(_, nonce)| async move {
+        task::spawn(async move {
+            AsyncPoW::do_pow(target, self.hash.clone())
+                .then(move |res| async move {
+                    let (_, nonce) = res.unwrap();
                     self.nonce = nonce.to_bytes_be();
                     worker_sink
                         .send(WorkerCommand::NonceCalculated { obj: self })
@@ -96,7 +97,7 @@ impl Object {
                         .expect("receiver not to be dropped");
                 })
                 .await;
-        })());
+        });
     }
 }
 

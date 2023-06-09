@@ -568,12 +568,8 @@ impl NodeWorker {
                     Some(v) => {
                         msg.status = MessageStatus::WaitingForPOW.to_string();
                         let object = create_object_from_msg(&identity, &v, msg.clone());
-                        let old_hash = msg.hash.clone();
                         msg.hash = bs58::encode(&object.hash).into_string();
-                        self.messages_repo
-                            .update_model(old_hash, msg)
-                            .await
-                            .unwrap();
+                        self.messages_repo.save_model(msg).await.unwrap();
                         object.do_proof_of_work(self.command_sender.clone());
                     }
                     None => {

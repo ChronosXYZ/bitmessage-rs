@@ -674,7 +674,7 @@ impl NodeWorker {
         if let Some(_) = self.tracked_pubkeys.get(&tag) {
             let addr = self
                 .address_repo
-                .get_by_ripe_or_tag(tag)
+                .get_by_ripe_or_tag(tag.clone())
                 .await
                 .unwrap()
                 .expect("Address entity exists in db");
@@ -697,6 +697,7 @@ impl NodeWorker {
                     task::block_on(self.messages_repo.update_model(old_hash, x)).unwrap();
                     object.do_proof_of_work(self.command_sender.clone());
                 });
+            self.tracked_pubkeys.remove(&tag);
         }
     }
 

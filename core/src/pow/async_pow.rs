@@ -17,7 +17,7 @@ impl AsyncPoW {
         let (internal_sender, mut internal_receiver) = mpsc::channel(1);
 
         let mut workers = Vec::new();
-        let num_of_cores = num_cpus::get_physical();
+        let num_of_cores = num_cpus::get() - 1; // TODO make this setting configurable
 
         for i in 0..num_of_cores {
             let t = target.clone();
@@ -30,11 +30,10 @@ impl AsyncPoW {
                 let mut nonce: BigUint = BigUint::from(i);
                 let mut trial_value = BigUint::parse_bytes(b"99999999999999999999", 10).unwrap();
                 while trial_value > t && !term_rx.try_recv().is_err() {
-                    let mut hasher = Sha512::new();
                     nonce += num_of_cores;
-                    hasher.update(nonce.to_bytes_be());
-                    hasher.update(ih.as_slice());
-                    let result_hash = Sha512::digest(&hasher.finalize());
+                    let result_hash = Sha512::digest(Sha512::digest(
+                        [nonce.to_bytes_be().as_slice(), ih.as_slice()].concat(),
+                    ));
                     trial_value = BigUint::from_bytes_be(&result_hash[0..8]);
                 }
 
@@ -53,7 +52,7 @@ impl AsyncPoW {
                 () = cancellation_task => {
                     log::debug!("cancelling workers");
                     for w in workers.into_iter() {
-                        w.send(());
+                        _ = w.send(());
                     }
                     internal_receiver.close();
                     return;
@@ -62,7 +61,7 @@ impl AsyncPoW {
                     if let Some(res) = result {
                         log::debug!("cancelling workers");
                         for w in workers.into_iter() {
-                            w.send(());
+                            _ = w.send(());
                         }
                         sender.send(res).expect("receiver not to be dropped");
                         internal_receiver.close();

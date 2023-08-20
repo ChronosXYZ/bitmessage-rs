@@ -15,7 +15,7 @@ use relm4::{
     view, AsyncComponentSender, RelmWidgetExt,
 };
 
-use crate::ui::{components::utils::typed_list_view, state};
+use crate::{components::utils::typed_list_view, state};
 
 use super::utils::typed_list_view::RelmListItem;
 

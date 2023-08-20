@@ -12,7 +12,7 @@ use relm4::{
 };
 
 use super::utils::typed_list_view::RelmListItem;
-use crate::ui::state;
+use crate::state;
 
 #[derive(Debug, Clone)]
 pub struct SelectedFolder {

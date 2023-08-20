@@ -1,10 +1,11 @@
-use crate::ui::app::AppModel;
+use crate::app::AppModel;
 use async_std::task;
 use nantoka_core::network;
 use relm4::RelmApp;
-use ui::state;
 
-mod ui;
+pub mod app;
+mod components;
+pub mod state;
 
 fn main() {
     pretty_env_logger::init();

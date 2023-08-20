@@ -8,9 +8,9 @@ use relm4::{
 };
 use relm4::{Component, ComponentController, Controller, RelmWidgetExt};
 
-use crate::ui::components::dialogs::identity_dialog::IdentityDialogOutput;
+use crate::components::dialogs::identity_dialog::IdentityDialogOutput;
 
-use crate::ui::state;
+use crate::state;
 
 use super::dialogs::identity_dialog::{IdentityDialogInit, IdentityDialogModel};
 use super::factories::identity_list_row::{

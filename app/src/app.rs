@@ -6,7 +6,7 @@ use relm4::{
 };
 use relm4_icons::icon_name;
 
-use crate::ui::components::identities_list::IdentitiesListInput;
+use crate::components::identities_list::IdentitiesListInput;
 
 use super::components::dialogs::identity_dialog::{IdentityDialogModel, IdentityDialogOutput};
 use super::components::identities_list::{IdentitiesListModel, IdentitiesListOutput};

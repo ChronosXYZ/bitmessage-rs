@@ -11,7 +11,7 @@ use relm4::{
     view, AsyncComponentSender, RelmWidgetExt,
 };
 
-use crate::{network::node::worker::Folder, ui::state};
+use crate::{network::node::worker::Folder, state};
 
 use super::{
     messages_sidebar::SelectedFolder,

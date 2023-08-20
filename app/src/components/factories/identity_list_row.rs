@@ -9,7 +9,7 @@ use relm4::{
 };
 use relm4_icons::icon_name;
 
-use crate::ui::components::identities_list::IdentitiesListInput;
+use crate::components::identities_list::IdentitiesListInput;
 
 pub struct IdentityListRow {
     pub label: String,

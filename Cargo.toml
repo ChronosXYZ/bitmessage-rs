@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "app",
-    "core"
+    "core",
+    "cli"
 ]
 
 [workspace.dependencies]

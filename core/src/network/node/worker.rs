@@ -594,16 +594,31 @@ impl NodeWorker {
             .await
             .unwrap();
         for m in msgs_waiting_for_pubkey {
-            let tag = bs58::encode(
-                self.address_repo
-                    .get_by_ripe_or_tag(m.recipient)
+            if self
+                .address_repo
+                .get_by_ripe_or_tag(m.recipient.clone())
+                .await
+                .unwrap()
+                .unwrap()
+                .public_encryption_key
+                .is_some()
+            {
+                self.messages_repo
+                    .update_message_status(m.hash, MessageStatus::WaitingForPOW)
                     .await
-                    .unwrap()
-                    .unwrap()
-                    .tag,
-            )
-            .into_string();
-            self.tracked_pubkeys.insert(tag, true);
+                    .expect("repo not to fail");
+            } else {
+                let tag = bs58::encode(
+                    self.address_repo
+                        .get_by_ripe_or_tag(m.recipient)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .tag,
+                )
+                .into_string();
+                self.tracked_pubkeys.insert(tag, true);
+            }
         }
 
         // restart proof of work for messages

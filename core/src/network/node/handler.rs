@@ -284,7 +284,10 @@ impl Handler {
                     }
                 }
             } else {
-                log::debug!("message object with hash {} failed to decrypt, skipping...", bs58::encode(object.hash.clone()).into_string());
+                log::debug!(
+                    "message object with hash {} failed to decrypt, skipping...",
+                    bs58::encode(object.hash.clone()).into_string()
+                );
                 continue;
             }
         }

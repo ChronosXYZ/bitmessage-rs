@@ -1,11 +1,10 @@
+use crate::pow::{self, async_pow::AsyncPoW};
 use async_std::task;
 use chrono::Utc;
 use futures::{channel::mpsc, FutureExt, SinkExt};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use sha2::Digest;
-
-use crate::pow::{self, AsyncPoW};
 
 use super::{address::Address, node::worker::WorkerCommand};
 

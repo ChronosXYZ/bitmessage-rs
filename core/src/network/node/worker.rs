@@ -7,8 +7,7 @@ use diesel::{
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use rand::distributions::{Alphanumeric, DistString};
-use std::{borrow::Cow, collections::HashMap, error::Error, fs, io, iter, time::Duration};
-use void::Void;
+use std::{borrow::Cow, collections::HashMap, error::Error, fs, iter, time::Duration};
 
 use directories::ProjectDirs;
 use futures::{
@@ -22,9 +21,7 @@ use libp2p::{
     kad::{store::MemoryStore, Kademlia, KademliaConfig},
     mdns, noise,
     request_response::{self, ProtocolSupport},
-    swarm::{
-        derive_prelude::Either, keep_alive, ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent,
-    },
+    swarm::{keep_alive, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use log::{debug, info};
@@ -297,22 +294,7 @@ impl NodeWorker {
         )
     }
 
-    async fn handle_event(
-        &mut self,
-        event: SwarmEvent<
-            BitmessageBehaviourEvent,
-            Either<
-                Either<
-                    Either<
-                        Either<Either<Void, io::Error>, io::Error>,
-                        ConnectionHandlerUpgrErr<io::Error>,
-                    >,
-                    Void,
-                >,
-                Void,
-            >,
-        >,
-    ) {
+    async fn handle_event<E>(&mut self, event: SwarmEvent<BitmessageBehaviourEvent, E>) {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
                 info!("Listening on {address:?}");

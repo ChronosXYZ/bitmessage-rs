@@ -1,11 +1,9 @@
 use crate::ui::app::AppModel;
 use async_std::task;
+use nantoka_core::network;
 use relm4::RelmApp;
 use ui::state;
 
-mod network;
-mod pow;
-mod repositories;
 mod ui;
 
 fn main() {

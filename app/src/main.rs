@@ -1,5 +1,6 @@
 use crate::app::AppModel;
 use async_std::task;
+use directories::ProjectDirs;
 use nantoka_core::network;
 use relm4::RelmApp;
 
@@ -10,7 +11,10 @@ pub mod state;
 fn main() {
     pretty_env_logger::init();
 
-    let (mut client, worker) = network::new(None);
+    let dirs = ProjectDirs::from("", "", "bitmessage-rs").unwrap();
+    let data_dir = dirs.data_dir();
+
+    let (mut client, worker) = network::new(None, data_dir.to_path_buf());
 
     task::spawn(worker.run());
 

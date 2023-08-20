@@ -7,9 +7,10 @@ use diesel::{
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use rand::distributions::{Alphanumeric, DistString};
-use std::{borrow::Cow, collections::HashMap, error::Error, fs, iter, time::Duration};
+use std::{
+    borrow::Cow, collections::HashMap, error::Error, fs, iter, path::PathBuf, time::Duration,
+};
 
-use directories::ProjectDirs;
 use futures::{
     channel::{mpsc, oneshot},
     select, StreamExt,
@@ -166,6 +167,7 @@ pub struct NodeWorker {
 impl NodeWorker {
     pub fn new(
         bootstrap_nodes: Option<Vec<Multiaddr>>,
+        data_dir: PathBuf,
     ) -> (NodeWorker, mpsc::Sender<WorkerCommand>) {
         let local_key = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
@@ -231,8 +233,6 @@ impl NodeWorker {
                 .unwrap();
         }
 
-        let dirs = ProjectDirs::from("", "", "bitmessage-rs").unwrap();
-        let data_dir = dirs.data_dir();
         let data_dir_buf = data_dir.join("db");
         fs::create_dir_all(&data_dir_buf).expect("db folder is created");
         let db_url = data_dir_buf.join("database.db");

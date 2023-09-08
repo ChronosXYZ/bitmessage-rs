@@ -28,7 +28,7 @@ impl SqliteInventoryRepository {
 impl InventoryRepository for SqliteInventoryRepository {
     async fn get(&self) -> Result<Vec<String>, Box<dyn Error>> {
         let rows: Vec<String> =
-            sqlx::query_scalar("SELECT hash FROM inventory WHERE expires_at > ?")
+            sqlx::query_scalar("SELECT hash FROM inventory WHERE expires > ?")
                 .bind(Utc::now())
                 .fetch_all(&self.connection_pool)
                 .await?;

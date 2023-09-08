@@ -88,10 +88,10 @@ pub enum WorkerCommand {
     },
     BroadcastMsgByPubSub {
         sender: oneshot::Sender<Result<(), Box<dyn Error + Send>>>,
-        msg: messages::NetworkMessage,
+        msg: NetworkMessage,
     },
     NonceCalculated {
-        obj: messages::Object,
+        obj: Object,
     },
     GetOwnIdentities {
         sender: oneshot::Sender<Result<Vec<Address>, DynError>>,
@@ -147,7 +147,7 @@ impl NodeWorker {
     ) -> (NodeWorker, mpsc::Sender<WorkerCommand>) {
         let local_key = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
-        info!("Local peer id: {local_peer_id:?}");
+        info!("Local peer id: {:?}", local_peer_id);
 
         let transport = tcp::async_io::Transport::default()
             .upgrade(Version::V1Lazy)
@@ -273,7 +273,7 @@ impl NodeWorker {
     async fn handle_event<E>(&mut self, event: SwarmEvent<BitmessageBehaviourEvent, E>) {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Listening on {address:?}");
+                info!("Listening on {:?}", address);
                 let indexes: Vec<usize> = self
                     .pending_commands
                     .iter()
@@ -295,9 +295,9 @@ impl NodeWorker {
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
-                endpoint,
+                endpoint: _endpoint,
                 num_established,
-                cause,
+                cause: _cause,
             } => {
                 if num_established == 0 {
                     self.swarm
@@ -315,7 +315,7 @@ impl NodeWorker {
                     request,
                     channel,
                 } => {
-                    debug!("received request {request_id}: {:?}", request);
+                    debug!("received request {}: {:?}", request_id, request);
                     let msg = self.handler.handle_message(request.0).await.unwrap();
                     self.swarm
                         .behaviour_mut()
@@ -327,7 +327,7 @@ impl NodeWorker {
                     request_id,
                     response,
                 } => {
-                    debug!("received response on {request_id}: {:?}", response);
+                    debug!("received response on {}: {:?}", request_id, response);
                     let another_request = self.handler.handle_message(response.0).await;
                     if let Some(m) = another_request {
                         self.swarm
@@ -344,7 +344,7 @@ impl NodeWorker {
                 list,
             ))) => {
                 for (peer_id, multiaddr) in list {
-                    log::debug!("Found new peer via mDNS: {:?}/{:?}", multiaddr, peer_id);
+                    debug!("Found new peer via mDNS: {:?}/{:?}", multiaddr, peer_id);
                     self.swarm
                         .behaviour_mut()
                         .kademlia
@@ -390,7 +390,7 @@ impl NodeWorker {
                         .expect("Receiver not to be dropped"),
                 };
             }
-            WorkerCommand::Dial { peer, sender } => todo!(),
+            WorkerCommand::Dial { peer: _peer, sender: _sender } => todo!(),
             WorkerCommand::GetListenerAddress { sender } => match self.swarm.listeners().next() {
                 Some(v) => {
                     sender.send(v.clone()).expect("Receiver not to be dropped");
@@ -428,12 +428,17 @@ impl NodeWorker {
                     .expect("repo not to fail");
 
                 let inventory = self.inventory_repo.get().await.expect("repo not to fail");
-                let msg = messages::NetworkMessage {
+                let msg = NetworkMessage {
                     command: MessageCommand::Inv,
                     payload: MessagePayload::Inv { inventory },
                 };
-                self.publish_pubsub(msg)
-                    .expect("pubsub publish not to fail");
+                let result = self.publish_pubsub(msg);
+                match result {
+                    Err(e) => {
+                        log::error!("Pubsub failed to publish the message: {}", e);
+                    }
+                    _ => {}
+                }
             }
             WorkerCommand::GetOwnIdentities { sender } => {
                 let result = self.address_repo.get_identities().await;
@@ -538,7 +543,7 @@ impl NodeWorker {
                         msg.hash = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
                         self.messages_repo.save_model(msg.clone()).await.unwrap();
                         // send getpubkey request
-                        let obj = messages::Object::with_signing(
+                        let obj = Object::with_signing(
                             &identity,
                             ObjectKind::Getpubkey {
                                 tag: Address::new(bs58::decode(msg.recipient).into_vec().unwrap())
@@ -554,7 +559,7 @@ impl NodeWorker {
         };
     }
 
-    fn publish_pubsub(&mut self, msg: messages::NetworkMessage) -> Result<MessageId, PublishError> {
+    fn publish_pubsub(&mut self, msg: NetworkMessage) -> Result<MessageId, PublishError> {
         let serialized_msg = serde_cbor::to_vec(&msg).unwrap();
         self.swarm
             .behaviour_mut()
@@ -626,7 +631,7 @@ impl NodeWorker {
         // cleanup expired objects from the storage
         self.inventory_repo.cleanup().await.unwrap();
 
-        log::debug!("node worker event loop started");
+        debug!("node worker event loop started");
         loop {
             select! {
                 event = self.swarm.select_next_some() => self.handle_event(event).await,
@@ -677,7 +682,7 @@ impl NodeWorker {
     /// When we receive IdentityInfo, if the peer supports our Kademlia protocol, we add
     /// their listen addresses to the DHT, so they will be propagated to other peers.
     fn handle_identify_event(&mut self, identify_event: identify::Event) {
-        log::debug!("Received identify::Event: {:?}", identify_event);
+        debug!("Received identify::Event: {:?}", identify_event);
 
         if let identify::Event::Received {
             peer_id,
@@ -694,7 +699,7 @@ impl NodeWorker {
                 .any(|p| p.as_bytes() == KADEMLIA_PROTO_NAME)
             {
                 for addr in listen_addrs {
-                    log::debug!("Adding received IdentifyInfo matching protocol '{}' to the DHT. Peer: {}, addr: {}", String::from_utf8_lossy(KADEMLIA_PROTO_NAME), peer_id, addr);
+                    debug!("Adding received IdentifyInfo matching protocol '{}' to the DHT. Peer: {}, addr: {}", String::from_utf8_lossy(KADEMLIA_PROTO_NAME), peer_id, addr);
                     self.swarm
                         .behaviour_mut()
                         .kademlia
@@ -727,7 +732,7 @@ impl NodeWorker {
     fn on_new_peer(&mut self, peer_id: PeerId) {
         self.swarm.behaviour_mut().rpc.send_request(
             &peer_id,
-            BitmessageRequest(messages::NetworkMessage {
+            BitmessageRequest(NetworkMessage {
                 command: MessageCommand::ReqInv,
                 payload: MessagePayload::None,
             }),
@@ -740,7 +745,7 @@ fn extract_peer_id_from_multiaddr(
 ) -> Result<PeerId, Box<dyn Error>> {
     match address_with_peer_id.iter().last() {
         Some(multiaddr::Protocol::P2p(hash)) => PeerId::from_multihash(hash).map_err(|multihash| {
-            format!("Invalid PeerId '{multihash:?}' in Multiaddr '{address_with_peer_id}'").into()
+            format!("Invalid PeerId '{:?}' in Multiaddr '{}'", multihash, address_with_peer_id).into()
         }),
         _ => Err("Multiaddr does not contain peer_id".into()),
     }
@@ -762,7 +767,7 @@ fn create_object_from_msg(identity: &Address, recipient: &Address, msg: models::
     };
     let encrypted =
         serialize_and_encrypt_payload_pub(unenc_msg, &recipient.public_encryption_key.unwrap());
-    messages::Object::with_signing(
+    Object::with_signing(
         &identity,
         ObjectKind::Msg { encrypted },
         Utc::now() + chrono::Duration::days(7), // FIXME

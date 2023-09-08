@@ -3,6 +3,8 @@ use num_bigint::BigUint;
 use sha2::{Digest, Sha512};
 
 /// Function to do PoW for sending messages into network
+/// NOTE: just an example.
+#[allow(dead_code)]
 pub(crate) async fn do_pow(target: BigUint, initial_hash: Vec<u8>) -> (BigUint, BigUint) {
     info!("PoW has started");
 

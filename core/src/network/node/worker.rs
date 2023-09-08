@@ -60,7 +60,7 @@ const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
 
 const MIGRATIONS: Migrator = sqlx::migrate!("src/repositories/sqlite/migrations");
 const COMMON_PUBSUB_TOPIC: &'static str = "common";
-const POOL_TIMEOUT: Duration = Duration::from_secs(30);
+const POOL_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 pub enum Folder {
@@ -234,7 +234,8 @@ impl NodeWorker {
                 .synchronous(SqliteSynchronous::Normal)
                 .busy_timeout(POOL_TIMEOUT);
 
-        let pool = SqlitePoolOptions::new().connect_lazy_with(connect_options);
+        let pool = task::block_on(SqlitePoolOptions::new().connect_with(connect_options))
+            .expect("pool open");
 
         task::block_on(MIGRATIONS.run(&pool)).expect("migrations not to fail");
 

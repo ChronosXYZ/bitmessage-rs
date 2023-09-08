@@ -4,6 +4,7 @@ members = [
     "core",
     "cli"
 ]
+resolver = "2"
 
 [workspace.dependencies]
 nantoka-core = { version = "0.1.0", path = "core"}

@@ -1,4 +1,4 @@
--- This file should undo anything in `up.sql`
+-- Add down migration script here
 PRAGMA foreign_keys=off;
 
 BEGIN TRANSACTION;

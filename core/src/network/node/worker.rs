@@ -1,14 +1,14 @@
 use async_std::task;
 use chrono::Utc;
-use diesel::{
-    connection::SimpleConnection,
-    r2d2::{ConnectionManager, Pool},
-    SqliteConnection,
-};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use rand::distributions::{Alphanumeric, DistString};
+use sqlx::{
+    migrate::Migrator,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
+    SqlitePool,
+};
 use std::{
-    borrow::Cow, collections::HashMap, error::Error, fs, iter, path::PathBuf, time::Duration,
+    borrow::Cow, collections::HashMap, error::Error, fs, iter, path::PathBuf, str::FromStr,
+    time::Duration,
 };
 
 use futures::{
@@ -58,38 +58,14 @@ use super::handler::Handler;
 const IDENTIFY_PROTO_NAME: &str = "/bitmessage/id/1.0.0";
 const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
 
-const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/repositories/sqlite/migrations");
+const MIGRATIONS: Migrator = sqlx::migrate!("src/repositories/sqlite/migrations");
 const COMMON_PUBSUB_TOPIC: &'static str = "common";
+const POOL_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug)]
 pub enum Folder {
     Inbox,
     Sent,
-}
-
-#[derive(Debug)]
-pub struct DbConnectionOpts {
-    pub enable_wal: bool,
-    pub enable_foreign_keys: bool,
-    pub busy_timeout: Option<Duration>,
-}
-
-impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error> for DbConnectionOpts {
-    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
-        (|| {
-            if self.enable_wal {
-                conn.batch_execute("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
-            }
-            if self.enable_foreign_keys {
-                conn.batch_execute("PRAGMA foreign_keys = ON;")?;
-            }
-            if let Some(d) = self.busy_timeout {
-                conn.batch_execute(&format!("PRAGMA busy_timeout = {};", d.as_millis()))?;
-            }
-            Ok(())
-        })()
-        .map_err(diesel::r2d2::Error::QueryError)
-    }
 }
 
 type DynError = Box<dyn Error + Send + Sync>;
@@ -156,7 +132,7 @@ pub struct NodeWorker {
     tracked_pubkeys: HashMap<String, bool>,
 
     pending_commands: Vec<WorkerCommand>,
-    _sqlite_connection_pool: Pool<ConnectionManager<SqliteConnection>>,
+    _sqlite_connection_pool: SqlitePool,
     common_topic: Sha256Topic,
 
     inventory_repo: Box<InventoryRepositorySync>,
@@ -239,21 +215,6 @@ impl NodeWorker {
 
         debug!("{:?}", db_url.to_str().unwrap());
 
-        let pool = Pool::builder()
-            .max_size(16)
-            .connection_customizer(Box::new(DbConnectionOpts {
-                enable_wal: true,
-                enable_foreign_keys: true,
-                busy_timeout: Some(Duration::from_secs(30)),
-            }))
-            .build(ConnectionManager::<SqliteConnection>::new(
-                db_url.into_os_string().into_string().unwrap(),
-            ))
-            .unwrap();
-
-        let conn = &mut pool.get().unwrap();
-        conn.run_pending_migrations(MIGRATIONS)
-            .expect("migrations won't fail");
         let topic = Sha256Topic::new(COMMON_PUBSUB_TOPIC);
         swarm
             .behaviour_mut()
@@ -263,6 +224,20 @@ impl NodeWorker {
 
         let (sender, receiver) = mpsc::channel(3);
         let (pubkey_notifier_sink, pubkey_notifier) = mpsc::channel(3);
+
+        let connect_options =
+            SqliteConnectOptions::from_str(&format!("sqlite://{}", db_url.to_string_lossy()))
+                .unwrap()
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .foreign_keys(true)
+                .synchronous(SqliteSynchronous::Normal)
+                .busy_timeout(POOL_TIMEOUT);
+
+        let pool = SqlitePoolOptions::new().connect_lazy_with(connect_options);
+
+        task::block_on(MIGRATIONS.run(&pool)).expect("migrations not to fail");
+
         let inventory_repo = Box::new(SqliteInventoryRepository::new(pool.clone()));
         let address_repo = Box::new(SqliteAddressRepository::new(pool.clone()));
         let message_repo = Box::new(SqliteMessageRepository::new(pool.clone()));

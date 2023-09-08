@@ -138,7 +138,7 @@ impl NodeClient {
             hash: "".to_string(),
             sender: from.clone(),
             recipient: to,
-            created_at: Utc::now().naive_utc(),
+            created_at: Utc::now(),
             status: MessageStatus::Unknown.to_string(),
             signature: Vec::new(),
             data,

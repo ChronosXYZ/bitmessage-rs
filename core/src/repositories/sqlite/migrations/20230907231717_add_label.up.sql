@@ -1,3 +1,2 @@
--- Your SQL goes here
-
+-- Add up migration script here
 ALTER TABLE addresses ADD label TEXT;

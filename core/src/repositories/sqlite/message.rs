@@ -2,28 +2,20 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use diesel::{
-    r2d2::{ConnectionManager, Pool},
-    ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection,
-};
+use sqlx::SqlitePool;
 
 use crate::{network::messages::UnencryptedMsg, repositories::message::MessageRepository};
 
-use super::{
-    models::{self, MessageStatus},
-    schema::{self, messages::dsl},
-};
+use super::models::{self, MessageStatus};
 
 #[derive(Clone)]
 pub struct SqliteMessageRepository {
-    connection_pool: Pool<ConnectionManager<SqliteConnection>>,
+    pool: SqlitePool,
 }
 
 impl SqliteMessageRepository {
-    pub fn new(conn_pool: Pool<ConnectionManager<SqliteConnection>>) -> Self {
-        SqliteMessageRepository {
-            connection_pool: conn_pool,
-        }
+    pub fn new(conn_pool: SqlitePool) -> Self {
+        SqliteMessageRepository { pool: conn_pool }
     }
 }
 
@@ -36,27 +28,35 @@ impl MessageRepository for SqliteMessageRepository {
         msg: UnencryptedMsg,
         signature: Vec<u8>,
     ) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-
         let model = models::Message {
             hash,
             sender: msg.sender_ripe,
             recipient: msg.destination_ripe,
             data: msg.message,
-            created_at: Utc::now().naive_utc(),
+            created_at: Utc::now(),
             status: MessageStatus::Received.to_string(),
             signature,
         };
-        diesel::insert_into(schema::messages::table)
-            .values(&model)
-            .execute(&mut conn)?;
+
+        sqlx::query("INSERT INTO messages (hash, sender, recipient, data, created_at, status, signature) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+            .bind(model.hash)
+            .bind(model.sender)
+            .bind(model.recipient)
+            .bind(model.data)
+            .bind(model.created_at)
+            .bind(model.status)
+            .bind(model.signature)
+            .execute(&self.pool)
+            .await?;
+
         Ok(())
     }
 
     /// Get all messages in repository
     async fn get_messages(&self) -> Result<Vec<models::Message>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = dsl::messages.load::<models::Message>(&mut conn)?;
+        let results = sqlx::query_as("SELECT * FROM messages")
+            .fetch_all(&self.pool)
+            .await?;
         Ok(results)
     }
 
@@ -64,10 +64,10 @@ impl MessageRepository for SqliteMessageRepository {
         &self,
         address: String,
     ) -> Result<Vec<models::Message>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = dsl::messages
-            .filter(schema::messages::recipient.eq(address))
-            .load::<models::Message>(&mut conn)?;
+        let results = sqlx::query_as("SELECT * FROM messages WHERE recipient = ?")
+            .bind(address)
+            .fetch_all(&self.pool)
+            .await?;
         Ok(results)
     }
 
@@ -75,18 +75,24 @@ impl MessageRepository for SqliteMessageRepository {
         &self,
         address: String,
     ) -> Result<Vec<models::Message>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = dsl::messages
-            .filter(schema::messages::sender.eq(address))
-            .load::<models::Message>(&mut conn)?;
+        let results = sqlx::query_as("SELECT * FROM messages WHERE sender = ?")
+            .bind(address)
+            .fetch_all(&self.pool)
+            .await?;
         Ok(results)
     }
 
     async fn save_model(&mut self, model: models::Message) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::insert_into(schema::messages::table)
-            .values(&model)
-            .execute(&mut conn)?;
+        sqlx::query("INSERT INTO messages (hash, sender, recipient, data, created_at, status, signature) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+            .bind(model.hash)
+            .bind(model.sender)
+            .bind(model.recipient)
+            .bind(model.data)
+            .bind(model.created_at)
+            .bind(model.status)
+            .bind(model.signature)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -95,10 +101,11 @@ impl MessageRepository for SqliteMessageRepository {
         hash: String,
         status: MessageStatus,
     ) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::update(dsl::messages.filter(schema::messages::hash.eq(hash)))
-            .set(schema::messages::status.eq(status.to_string()))
-            .execute(&mut conn)?;
+        sqlx::query("UPDATE messages SET status = ? WHERE hash = ?")
+            .bind(status.to_string())
+            .bind(hash)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -107,10 +114,25 @@ impl MessageRepository for SqliteMessageRepository {
         hash: String,
         model: models::Message,
     ) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::update(dsl::messages.filter(schema::messages::hash.eq(hash)))
-            .set(model)
-            .execute(&mut conn)?;
+        sqlx::query(
+            "UPDATE messages
+                        SET sender = ?1,
+                            recipient = ?2
+                            data = ?3,
+                            created_at = ?4,
+                            status = ?5,
+                            signature = ?6
+                        WHERE hash = ?7",
+        )
+        .bind(model.sender)
+        .bind(model.recipient)
+        .bind(model.data)
+        .bind(model.created_at)
+        .bind(model.status)
+        .bind(model.signature)
+        .bind(hash)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -118,16 +140,18 @@ impl MessageRepository for SqliteMessageRepository {
         &self,
         status: MessageStatus,
     ) -> Result<Vec<models::Message>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = dsl::messages
-            .filter(schema::messages::status.eq(status.to_string()))
-            .load::<models::Message>(&mut conn)?;
+        let results = sqlx::query_as("SELECT * FROM messages WHERE status = ?")
+            .bind(status.to_string())
+            .fetch_all(&self.pool)
+            .await?;
         Ok(results)
     }
 
     async fn remove_message(&mut self, hash: String) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::delete(dsl::messages.filter(schema::messages::hash.eq(hash))).execute(&mut conn)?;
+        sqlx::query("DELETE FROM messages WHERE hash = ?")
+            .bind(hash)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }

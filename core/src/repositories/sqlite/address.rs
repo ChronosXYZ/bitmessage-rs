@@ -1,30 +1,21 @@
 use std::error::Error;
 
 use async_trait::async_trait;
-use diesel::{
-    query_dsl::methods::FilterDsl,
-    r2d2::{ConnectionManager, Pool},
-    BoolExpressionMethods, ExpressionMethods, RunQueryDsl, SqliteConnection,
-};
 use ecies::{PublicKey, SecretKey};
+use sqlx::SqlitePool;
 
 use crate::{network::address::Address, repositories::address::AddressRepository};
 
-use super::{
-    models,
-    schema::{self, addresses::dsl},
-};
+use super::models;
 
 #[derive(Clone)]
 pub struct SqliteAddressRepository {
-    connection_pool: Pool<ConnectionManager<SqliteConnection>>,
+    pool: SqlitePool,
 }
 
 impl SqliteAddressRepository {
-    pub fn new(conn_poll: Pool<ConnectionManager<SqliteConnection>>) -> SqliteAddressRepository {
-        SqliteAddressRepository {
-            connection_pool: conn_poll,
-        }
+    pub fn new(pool: SqlitePool) -> SqliteAddressRepository {
+        SqliteAddressRepository { pool }
     }
 
     fn serialize(a: Address) -> models::Address {
@@ -90,30 +81,36 @@ impl SqliteAddressRepository {
 #[async_trait]
 impl AddressRepository for SqliteAddressRepository {
     async fn store(&mut self, a: Address) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
         let model = Self::serialize(a);
-        diesel::insert_into(schema::addresses::table)
-            .values(&model)
-            .execute(&mut conn)?;
+        sqlx::query("INSERT INTO addresses (address, tag, public_encryption_key, public_signing_key, private_signing_key, private_encryption_key, label)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7)")
+            .bind(model.address)
+            .bind(model.tag)
+            .bind(model.public_encryption_key)
+            .bind(model.public_signing_key)
+            .bind(model.private_signing_key)
+            .bind(model.private_encryption_key)
+            .bind(model.label)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
     async fn delete_address(&mut self, hash: String) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::delete(dsl::addresses.filter(schema::addresses::address.eq(hash)))
-            .execute(&mut conn)?;
+        sqlx::query("DELETE FROM addresses WHERE address = ?")
+            .bind(hash)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
     async fn get_by_ripe_or_tag(&self, hash: String) -> Result<Option<Address>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = dsl::addresses
-            .filter(
-                schema::addresses::address
-                    .eq(&hash)
-                    .or(schema::addresses::tag.eq(&hash)),
-            )
-            .load::<models::Address>(&mut conn)?;
+        let results: Vec<models::Address> =
+            sqlx::query_as("SELECT * FROM addresses WHERE address = ? OR tag = ?")
+                .bind(&hash)
+                .bind(&hash)
+                .fetch_all(&self.pool)
+                .await?;
         if results.len() == 0 {
             return Ok(None);
         }
@@ -124,14 +121,9 @@ impl AddressRepository for SqliteAddressRepository {
     }
 
     async fn get_contacts(&self) -> Result<Vec<Address>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = schema::addresses::dsl::addresses
-            .filter(
-                schema::addresses::public_signing_key
-                    .is_not_null()
-                    .and(schema::addresses::public_encryption_key.is_not_null()),
-            )
-            .load::<models::Address>(&mut conn)?;
+        let results: Vec<models::Address> = sqlx::query_as("SELECT * FROM addresses WHERE public_signing_key IS NOT NULL AND public_encryption_key IS NOT NULL")
+            .fetch_all(&self.pool)
+            .await?;
         let mut contacts = vec![];
         for res in results {
             let addr = Self::deserialize(&res)?;
@@ -141,14 +133,9 @@ impl AddressRepository for SqliteAddressRepository {
     }
 
     async fn get_identities(&self) -> Result<Vec<Address>, Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        let results = schema::addresses::dsl::addresses
-            .filter(
-                schema::addresses::private_signing_key
-                    .is_not_null()
-                    .and(schema::addresses::private_encryption_key.is_not_null()),
-            )
-            .load::<models::Address>(&mut conn)?;
+        let results: Vec<models::Address> = sqlx::query_as("SELECT * FROM addresses WHERE private_signing_key IS NOT NULL AND private_encryption_key IS NOT NULL")
+            .fetch_all(&self.pool)
+            .await?;
         let mut identities = vec![];
         for res in results {
             let addr = Self::deserialize(&res)?;
@@ -163,20 +150,13 @@ impl AddressRepository for SqliteAddressRepository {
         public_signing_key: PublicKey,
         public_encryption_key: PublicKey,
     ) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::update(
-            dsl::addresses.filter(
-                schema::addresses::address
-                    .eq(&hash)
-                    .or(schema::addresses::tag.eq(&hash)),
-            ),
-        )
-        .set((
-            schema::addresses::public_signing_key.eq(Some(public_signing_key.serialize().to_vec())),
-            schema::addresses::public_encryption_key
-                .eq(Some(public_encryption_key.serialize().to_vec())),
-        ))
-        .execute(&mut conn)?;
+        sqlx::query("UPDATE addresses SET public_signing_key = ?, public_encryption_key = ? WHERE address = ? OR tag = ?")
+            .bind(Some(public_signing_key.serialize().to_vec()))
+            .bind(Some(public_encryption_key.serialize().to_vec()))
+            .bind(&hash)
+            .bind(&hash)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -185,10 +165,11 @@ impl AddressRepository for SqliteAddressRepository {
         ripe: String,
         new_label: String,
     ) -> Result<(), Box<dyn Error>> {
-        let mut conn = self.connection_pool.get().unwrap();
-        diesel::update(dsl::addresses.filter(schema::addresses::address.eq(ripe)))
-            .set((schema::addresses::label.eq(Some(new_label)),))
-            .execute(&mut conn)?;
+        sqlx::query("UPDATE addresses SET label = ? WHERE address = ?")
+            .bind(Some(new_label))
+            .bind(Some(ripe))
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }

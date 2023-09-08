@@ -1,10 +1,7 @@
-use super::schema::{addresses, inventory, messages};
-use chrono::NaiveDateTime;
-use diesel::prelude::*;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use strum::{Display, EnumString};
 
-#[derive(Queryable, Insertable, Debug, PartialEq)]
-#[diesel(table_name = addresses)]
+#[derive(sqlx::FromRow, Debug, PartialEq)]
 pub(crate) struct Address {
     pub address: String,
     pub tag: String,
@@ -15,14 +12,13 @@ pub(crate) struct Address {
     pub label: Option<String>,
 }
 
-#[derive(Queryable, Insertable, Debug, PartialEq)]
-#[diesel(table_name = inventory)]
+#[derive(sqlx::FromRow, Debug, PartialEq)]
 pub(crate) struct Object {
     pub hash: String,
     pub object_type: i32,
     pub nonce: Vec<u8>,
     pub data: Vec<u8>,
-    pub expires: NaiveDateTime,
+    pub expires: DateTime<Utc>,
     pub signature: Vec<u8>,
 }
 
@@ -35,14 +31,13 @@ pub enum MessageStatus {
     Unknown,
 }
 
-#[derive(Queryable, Insertable, Debug, PartialEq, Clone, AsChangeset)]
-#[diesel(table_name = messages)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Clone)]
 pub struct Message {
     pub hash: String,
     pub sender: String,
     pub recipient: String,
     pub data: Vec<u8>,
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
     pub status: String,
     pub signature: Vec<u8>,
 }

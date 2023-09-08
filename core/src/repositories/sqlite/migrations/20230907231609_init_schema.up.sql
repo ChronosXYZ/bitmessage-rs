@@ -1,5 +1,4 @@
--- Your SQL goes here
-
+-- Add up migration script here
 CREATE TABLE addresses (
     address TEXT PRIMARY KEY NOT NULL,
     tag TEXT NOT NULL,
@@ -26,4 +25,4 @@ CREATE TABLE messages (
     created_at TIMESTAMP NOT NULL,
     status TEXT NOT NULL,
     signature BLOB NOT NULL
-)
+);

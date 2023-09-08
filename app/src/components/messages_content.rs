@@ -1,5 +1,6 @@
 use std::cell::Ref;
 
+use chrono::Utc;
 use gtk::{
     glib::BoxedAnyObject,
     prelude::Cast,
@@ -21,7 +22,7 @@ use super::{
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct MessagesListItem {
     title: String,
-    date: chrono::NaiveDateTime,
+    date: chrono::DateTime<Utc>,
     from: String,
     to: String,
     body: String,

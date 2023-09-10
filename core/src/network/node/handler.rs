@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-use super::worker::WorkerCommand;
+use super::{pow_worker::ProofOfWorkWorkerCommand, worker::WorkerCommand};
 
 pub struct Handler {
     address_repo: Box<AddressRepositorySync>,
@@ -31,6 +31,7 @@ pub struct Handler {
     requested_objects: Vec<String>, // TODO periodically request missing object from every connection we have
     worker_event_sender: mpsc::Sender<WorkerCommand>,
     pubkey_notifier_sink: mpsc::Sender<String>,
+    pow_worker_sink: Option<mpsc::Sender<ProofOfWorkWorkerCommand>>,
 }
 
 impl Handler {
@@ -48,7 +49,12 @@ impl Handler {
             requested_objects: Vec::new(),
             worker_event_sender,
             pubkey_notifier_sink,
+            pow_worker_sink: None,
         }
+    }
+
+    pub fn set_pow_worker_sink(&mut self, sink: mpsc::Sender<ProofOfWorkWorkerCommand>) {
+        self.pow_worker_sink = Some(sink);
     }
 
     pub async fn handle_message(&mut self, msg: NetworkMessage) -> Option<NetworkMessage> {
@@ -133,7 +139,7 @@ impl Handler {
             }
 
             self.inventory_repo
-                .store_object(hash_str, obj.clone())
+                .store_object(obj.clone())
                 .await
                 .expect("repo not to fail");
 
@@ -244,7 +250,7 @@ impl Handler {
                     },
                     expires,
                 );
-                obj.do_proof_of_work(self.worker_event_sender.clone());
+                self.enqueue_pow(obj).await;
             }
         }
 
@@ -344,5 +350,14 @@ impl Handler {
             command: MessageCommand::Objects,
             payload: MessagePayload::Objects { objects },
         }
+    }
+
+    async fn enqueue_pow(&mut self, object: Object) {
+        self.pow_worker_sink
+            .as_mut()
+            .unwrap()
+            .send(ProofOfWorkWorkerCommand::EnqueuePoW { object })
+            .await
+            .expect("command successfully sent");
     }
 }

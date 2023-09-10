@@ -34,3 +34,6 @@ void = "1.0.2"
 strum = { version = "0.24", features = ["derive"] }
 directories = { workspace = true }
 sqlx = { version = "0.7.1", features = [ "runtime-async-std", "sqlite", "migrate", "chrono" ] }
+queues = "1.1.0"
+timer = "0.2.0"
+dyn-clone = "1.0.13"

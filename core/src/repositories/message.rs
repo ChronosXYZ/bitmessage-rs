@@ -1,13 +1,14 @@
 use std::error::Error;
 
 use async_trait::async_trait;
+use dyn_clone::{clone_trait_object, DynClone};
 
 use crate::network::messages::UnencryptedMsg;
 
 use super::sqlite::models::{self, MessageStatus};
 
 #[async_trait]
-pub trait MessageRepository {
+pub trait MessageRepository: DynClone {
     /// Save message in repository
     async fn save(
         &mut self,
@@ -37,10 +38,11 @@ pub trait MessageRepository {
         status: MessageStatus,
     ) -> Result<(), Box<dyn Error>>;
 
-    async fn update_model(
+    /// Update hash of message when inventory object is created
+    async fn update_hash(
         &mut self,
-        hash: String,
-        model: models::Message,
+        old_hash: String,
+        new_hash: String,
     ) -> Result<(), Box<dyn Error>>;
 
     async fn get_messages_by_status(
@@ -50,5 +52,7 @@ pub trait MessageRepository {
 
     async fn remove_message(&mut self, hash: String) -> Result<(), Box<dyn Error>>;
 }
+
+clone_trait_object!(MessageRepository);
 
 pub type MessageRepositorySync = dyn MessageRepository + Sync + Send;

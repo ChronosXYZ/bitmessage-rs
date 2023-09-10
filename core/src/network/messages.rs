@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use sha2::Digest;
 
-use super::{address::Address, node::worker::WorkerCommand};
+use super::{address::Address, node::pow_worker::ProofOfWorkWorkerCommand};
 
 pub type InventoryVector = Vec<String>;
 
@@ -78,7 +78,7 @@ impl Object {
         object
     }
 
-    pub fn do_proof_of_work(mut self, mut worker_sink: mpsc::Sender<WorkerCommand>) {
+    pub fn do_proof_of_work(mut self, mut worker_sink: mpsc::Sender<ProofOfWorkWorkerCommand>) {
         let target = pow::get_pow_target(
             &self,
             pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE,
@@ -91,7 +91,7 @@ impl Object {
                     let (_, nonce) = res.unwrap();
                     self.nonce = nonce.to_bytes_be();
                     worker_sink
-                        .send(WorkerCommand::NonceCalculated { obj: self })
+                        .send(ProofOfWorkWorkerCommand::NonceCalculated { object: self })
                         .await
                         .expect("receiver not to be dropped");
                 })

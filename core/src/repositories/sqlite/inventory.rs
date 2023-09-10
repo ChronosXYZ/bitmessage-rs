@@ -1,4 +1,4 @@
-use crate::network::messages::{Object, ObjectKind};
+use crate::network::messages::Object;
 use crate::pow;
 use std::error::Error;
 
@@ -22,22 +22,35 @@ impl SqliteInventoryRepository {
             connection_pool: conn_pool,
         }
     }
+
+    fn deserialize_model(m: models::Object) -> Object {
+        Object {
+            hash: bs58::decode(m.hash).into_vec().unwrap(),
+            nonce: if let Some(n) = m.nonce { n } else { vec![] },
+            expires: m.expires.timestamp(),
+            kind: serde_cbor::from_slice(&m.data).expect("data not to be malformed"),
+            signature: m.signature.clone(),
+            nonce_trials_per_byte: pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE, // FIXME save this in db
+            extra_bytes: pow::NETWORK_MIN_EXTRA_BYTES,                     // FIXME save this in db
+        }
+    }
 }
 
 #[async_trait]
 impl InventoryRepository for SqliteInventoryRepository {
     async fn get(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        let rows: Vec<String> =
-            sqlx::query_scalar("SELECT hash FROM inventory WHERE expires > ?")
-                .bind(Utc::now())
-                .fetch_all(&self.connection_pool)
-                .await?;
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT hash FROM inventory WHERE expires > ? AND nonce IS NOT NULL",
+        )
+        .bind(Utc::now())
+        .fetch_all(&self.connection_pool)
+        .await?;
         Ok(rows)
     }
 
     async fn get_object(&self, hash: String) -> Result<Option<Object>, Box<dyn Error>> {
         let obj: Result<models::Object, sqlx::Error> =
-            sqlx::query_as("SELECT * FROM inventory WHERE hash = ?")
+            sqlx::query_as("SELECT * FROM inventory WHERE hash = ? AND nonce IS NOT NULL")
                 .bind(&hash)
                 .fetch_one(&self.connection_pool)
                 .await;
@@ -50,18 +63,7 @@ impl InventoryRepository for SqliteInventoryRepository {
         }
 
         let obj = obj.unwrap();
-
-        let kind: ObjectKind = serde_cbor::from_slice(&obj.data).expect("data not to be malformed");
-
-        Ok(Some(Object {
-            hash: bs58::decode(hash).into_vec().unwrap(),
-            nonce: obj.nonce.clone(),
-            expires: obj.expires.timestamp(),
-            kind,
-            signature: obj.signature.clone(),
-            nonce_trials_per_byte: pow::NETWORK_MIN_NONCE_TRIALS_PER_BYTE, // FIXME save this in db
-            extra_bytes: pow::NETWORK_MIN_EXTRA_BYTES,                     // FIXME save this in db
-        }))
+        Ok(Some(Self::deserialize_model(obj)))
     }
 
     /// Filter inventory vector with missing objects
@@ -85,12 +87,17 @@ impl InventoryRepository for SqliteInventoryRepository {
     }
 
     /// Store received object
-    async fn store_object(&mut self, hash: String, o: Object) -> Result<(), Box<dyn Error>> {
+    async fn store_object(&mut self, o: Object) -> Result<(), Box<dyn Error>> {
+        let hash = bs58::encode(&o.hash).into_string();
         let data = serde_cbor::to_vec(&o.kind).expect("data not to be malformed");
 
         let model = models::Object {
             hash,
-            nonce: o.nonce,
+            nonce: if o.nonce.is_empty() {
+                None
+            } else {
+                Some(o.nonce)
+            },
             object_type: o.kind.object_type() as i32,
             data,
             expires: DateTime::<Utc>::from_utc(
@@ -108,6 +115,32 @@ impl InventoryRepository for SqliteInventoryRepository {
             .bind(model.expires)
             .bind(model.signature).execute(&self.connection_pool).await?;
 
+        Ok(())
+    }
+
+    async fn get_missing_pow_objects(&self) -> Result<Vec<Object>, Box<dyn Error>> {
+        let res =
+            sqlx::query_as::<_, models::Object>("SELECT * FROM inventory WHERE nonce IS NULL")
+                .fetch_all(&self.connection_pool)
+                .await;
+        let mut objects = vec![];
+        match res {
+            Ok(v) => {
+                for m in v {
+                    objects.push(Self::deserialize_model(m));
+                }
+            }
+            Err(e) => return Err(Box::new(e)),
+        }
+        Ok(objects)
+    }
+
+    async fn update_nonce(&mut self, hash: String, nonce: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        sqlx::query("UPDATE inventory SET nonce = ? WHERE hash = ?")
+            .bind(nonce)
+            .bind(hash)
+            .execute(&self.connection_pool)
+            .await?;
         Ok(())
     }
 

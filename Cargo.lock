@@ -1146,6 +1146,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcbb2bf8e87535c23f7a8a321e364ce21462d0ff10cb6407820e8e96dfff6653"
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfc4744c1b8f2a09adc0e55242f60b1af195d88596bd8700be74418c056c555"
+
+[[package]]
 name = "ecies"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3300,6 +3306,7 @@ dependencies = [
  "bytes 1.4.0",
  "chrono",
  "directories",
+ "dyn-clone",
  "ecies",
  "emailmessage",
  "erased-serde",
@@ -3312,6 +3319,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "pretty_env_logger",
+ "queues",
  "rand 0.8.5",
  "ripemd",
  "serde",
@@ -3321,6 +3329,7 @@ dependencies = [
  "sqlx",
  "strum",
  "thiserror",
+ "timer",
  "void",
 ]
 
@@ -3937,6 +3946,12 @@ checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "queues"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1475abae4f8ad4998590fe3acfe20104f0a5d48fc420c817cd2c09c3f56151f0"
 
 [[package]]
 name = "quick-error"
@@ -5305,6 +5320,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75c65469ed6b3a4809d987a41eb1dc918e9bc1d92211cbad7ae82931846f7451"
 dependencies = [
  "time-core",
+]
+
+[[package]]
+name = "timer"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31d42176308937165701f50638db1c31586f183f1aab416268216577aec7306b"
+dependencies = [
+ "chrono",
 ]
 
 [[package]]

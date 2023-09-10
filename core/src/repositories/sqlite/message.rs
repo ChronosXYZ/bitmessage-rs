@@ -109,33 +109,6 @@ impl MessageRepository for SqliteMessageRepository {
         Ok(())
     }
 
-    async fn update_model(
-        &mut self,
-        hash: String,
-        model: models::Message,
-    ) -> Result<(), Box<dyn Error>> {
-        sqlx::query(
-            "UPDATE messages
-                        SET sender = ?1,
-                            recipient = ?2
-                            data = ?3,
-                            created_at = ?4,
-                            status = ?5,
-                            signature = ?6
-                        WHERE hash = ?7",
-        )
-        .bind(model.sender)
-        .bind(model.recipient)
-        .bind(model.data)
-        .bind(model.created_at)
-        .bind(model.status)
-        .bind(model.signature)
-        .bind(hash)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     async fn get_messages_by_status(
         &self,
         status: MessageStatus,
@@ -150,6 +123,19 @@ impl MessageRepository for SqliteMessageRepository {
     async fn remove_message(&mut self, hash: String) -> Result<(), Box<dyn Error>> {
         sqlx::query("DELETE FROM messages WHERE hash = ?")
             .bind(hash)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn update_hash(
+        &mut self,
+        old_hash: String,
+        new_hash: String,
+    ) -> Result<(), Box<dyn Error>> {
+        sqlx::query("UPDATE messages SET hash = ? WHERE hash = ?")
+            .bind(new_hash)
+            .bind(old_hash)
             .execute(&self.pool)
             .await?;
         Ok(())

@@ -1,12 +1,13 @@
 use std::error::Error;
 
 use async_trait::async_trait;
+use dyn_clone::{clone_trait_object, DynClone};
 use ecies::PublicKey;
 
 use crate::network::address::Address;
 
 #[async_trait]
-pub trait AddressRepository {
+pub trait AddressRepository: DynClone {
     /// Store known address
     async fn store(&mut self, a: Address) -> Result<(), Box<dyn Error>>;
 
@@ -32,5 +33,7 @@ pub trait AddressRepository {
     async fn update_label(&mut self, ripe: String, new_label: String)
         -> Result<(), Box<dyn Error>>;
 }
+
+clone_trait_object!(AddressRepository);
 
 pub type AddressRepositorySync = dyn AddressRepository + Send + Sync;

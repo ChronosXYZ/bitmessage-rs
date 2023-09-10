@@ -13,7 +13,7 @@ use std::{
 
 use futures::{
     channel::{mpsc, oneshot},
-    select, StreamExt,
+    select, SinkExt, StreamExt,
 };
 use libp2p::{
     core::upgrade::Version,
@@ -36,7 +36,7 @@ use crate::{
             BitmessageProtocolCodec, BitmessageRequest, BitmessageResponse,
         },
         messages::{
-            self, MessageCommand, MessagePayload, MsgEncoding, NetworkMessage, Object, ObjectKind,
+            MessageCommand, MessagePayload, MsgEncoding, NetworkMessage, Object, ObjectKind,
             UnencryptedMsg,
         },
     },
@@ -53,14 +53,17 @@ use crate::{
     },
 };
 
-use super::handler::Handler;
+use super::{
+    handler::Handler,
+    pow_worker::{ProofOfWorkWorker, ProofOfWorkWorkerCommand},
+};
 
 const IDENTIFY_PROTO_NAME: &str = "/bitmessage/id/1.0.0";
 const KADEMLIA_PROTO_NAME: &[u8] = b"/bitmessage/kad/1.0.0";
 
 const MIGRATIONS: Migrator = sqlx::migrate!("src/repositories/sqlite/migrations");
 const COMMON_PUBSUB_TOPIC: &'static str = "common";
-const POOL_TIMEOUT: Duration = Duration::from_secs(5);
+const POOL_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug)]
 pub enum Folder {
@@ -138,6 +141,8 @@ pub struct NodeWorker {
     inventory_repo: Box<InventoryRepositorySync>,
     address_repo: Box<AddressRepositorySync>,
     messages_repo: Box<MessageRepositorySync>,
+
+    pow_worker_command_sink: Option<mpsc::Sender<ProofOfWorkWorkerCommand>>,
 }
 
 impl NodeWorker {
@@ -265,6 +270,8 @@ impl NodeWorker {
                 address_repo: address_repo.clone(),
                 inventory_repo: inventory_repo.clone(),
                 messages_repo: message_repo.clone(),
+
+                pow_worker_command_sink: None,
             },
             sender,
         )
@@ -390,7 +397,10 @@ impl NodeWorker {
                         .expect("Receiver not to be dropped"),
                 };
             }
-            WorkerCommand::Dial { peer: _peer, sender: _sender } => todo!(),
+            WorkerCommand::Dial {
+                peer: _peer,
+                sender: _sender,
+            } => todo!(),
             WorkerCommand::GetListenerAddress { sender } => match self.swarm.listeners().next() {
                 Some(v) => {
                     sender.send(v.clone()).expect("Receiver not to be dropped");
@@ -421,11 +431,6 @@ impl NodeWorker {
                         .unwrap(),
                     _ => {}
                 }
-
-                self.inventory_repo
-                    .store_object(bs58::encode(&obj.hash).into_string(), obj)
-                    .await
-                    .expect("repo not to fail");
 
                 let inventory = self.inventory_repo.get().await.expect("repo not to fail");
                 let msg = NetworkMessage {
@@ -533,15 +538,20 @@ impl NodeWorker {
                         let object = create_object_from_msg(&identity, &v, msg.clone());
                         msg.hash = bs58::encode(&object.hash).into_string();
                         self.messages_repo.save_model(msg).await.unwrap();
-                        object.do_proof_of_work(self.command_sender.clone());
+                        self.enqueue_pow(object).await;
                     }
                     None => {
                         let recipient_address = Address::with_string_repr(msg.recipient.clone());
-                        self.address_repo.store(recipient_address).await.unwrap();
+                        self.address_repo
+                            .store(recipient_address.clone())
+                            .await
+                            .unwrap();
                         msg.status = MessageStatus::WaitingForPubkey.to_string();
                         // we generate random hash value, cuz we don't really know real hash value of the message at the moment, and it's not that important
                         msg.hash = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
                         self.messages_repo.save_model(msg.clone()).await.unwrap();
+                        self.tracked_pubkeys
+                            .insert(bs58::encode(recipient_address.tag).into_string(), true);
                         // send getpubkey request
                         let obj = Object::with_signing(
                             &identity,
@@ -551,7 +561,7 @@ impl NodeWorker {
                             },
                             Utc::now() + chrono::Duration::days(7),
                         );
-                        obj.do_proof_of_work(self.command_sender.clone());
+                        self.enqueue_pow(obj).await;
                     }
                 }
                 sender.send(Ok(())).unwrap();
@@ -568,6 +578,16 @@ impl NodeWorker {
     }
 
     pub async fn run(mut self) {
+        let (pow_worker, pow_worker_sink) = ProofOfWorkWorker::new(
+            self.inventory_repo.clone(),
+            self.messages_repo.clone(),
+            self.address_repo.clone(),
+            self.command_sender.clone(),
+        );
+        self.pow_worker_command_sink = Some(pow_worker_sink.clone());
+        self.handler.set_pow_worker_sink(pow_worker_sink);
+        task::spawn(pow_worker.run());
+
         // populate tracked_pubkeys map
         let msgs_waiting_for_pubkey = self
             .messages_repo
@@ -587,7 +607,7 @@ impl NodeWorker {
                 self.messages_repo
                     .update_message_status(m.hash, MessageStatus::WaitingForPOW)
                     .await
-                    .expect("repo not to fail");
+                    .expect("db won't to fail");
             } else {
                 let tag = bs58::encode(
                     self.address_repo
@@ -600,32 +620,6 @@ impl NodeWorker {
                 .into_string();
                 self.tracked_pubkeys.insert(tag, true);
             }
-        }
-
-        // restart proof of work for messages
-        let msgs_waiting_for_pow = self
-            .messages_repo
-            .get_messages_by_status(MessageStatus::WaitingForPOW)
-            .await
-            .unwrap();
-        for mut m in msgs_waiting_for_pow {
-            let identity = self
-                .address_repo
-                .get_by_ripe_or_tag(m.sender.clone())
-                .await
-                .unwrap()
-                .unwrap();
-            let recipient = self
-                .address_repo
-                .get_by_ripe_or_tag(m.recipient.clone())
-                .await
-                .unwrap()
-                .unwrap();
-            let obj = create_object_from_msg(&identity, &recipient, m.clone());
-            let old_hash = m.hash.clone();
-            m.hash = bs58::encode(&obj.hash).into_string();
-            self.messages_repo.update_model(old_hash, m).await.unwrap();
-            obj.do_proof_of_work(self.command_sender.clone());
         }
 
         // cleanup expired objects from the storage
@@ -663,17 +657,22 @@ impl NodeWorker {
                 .unwrap();
             msgs.into_iter()
                 .filter(|x| x.status == MessageStatus::WaitingForPubkey.to_string())
-                .for_each(|mut x| {
+                .for_each(|x| {
                     let identity =
                         task::block_on(self.address_repo.get_by_ripe_or_tag(x.sender.clone()))
                             .unwrap()
                             .expect("identity exists in address repo");
-                    x.status = MessageStatus::WaitingForPOW.to_string();
                     let object = create_object_from_msg(&identity, &addr, x.clone());
                     let old_hash = x.hash.clone();
-                    x.hash = bs58::encode(&object.hash).into_string();
-                    task::block_on(self.messages_repo.update_model(old_hash, x)).unwrap();
-                    object.do_proof_of_work(self.command_sender.clone());
+                    let new_hash = bs58::encode(&object.hash).into_string();
+                    task::block_on(self.messages_repo.update_hash(old_hash, new_hash.clone()))
+                        .unwrap();
+                    task::block_on(
+                        self.messages_repo
+                            .update_message_status(new_hash, MessageStatus::WaitingForPOW),
+                    )
+                    .unwrap();
+                    task::block_on(self.enqueue_pow(object));
                 });
             self.tracked_pubkeys.remove(&tag);
         }
@@ -738,6 +737,15 @@ impl NodeWorker {
             }),
         );
     }
+
+    async fn enqueue_pow(&mut self, object: Object) {
+        self.pow_worker_command_sink
+            .as_mut()
+            .unwrap()
+            .send(ProofOfWorkWorkerCommand::EnqueuePoW { object })
+            .await
+            .expect("command successfully sent");
+    }
 }
 
 fn extract_peer_id_from_multiaddr(
@@ -745,13 +753,21 @@ fn extract_peer_id_from_multiaddr(
 ) -> Result<PeerId, Box<dyn Error>> {
     match address_with_peer_id.iter().last() {
         Some(multiaddr::Protocol::P2p(hash)) => PeerId::from_multihash(hash).map_err(|multihash| {
-            format!("Invalid PeerId '{:?}' in Multiaddr '{}'", multihash, address_with_peer_id).into()
+            format!(
+                "Invalid PeerId '{:?}' in Multiaddr '{}'",
+                multihash, address_with_peer_id
+            )
+            .into()
         }),
         _ => Err("Multiaddr does not contain peer_id".into()),
     }
 }
 
-fn create_object_from_msg(identity: &Address, recipient: &Address, msg: models::Message) -> Object {
+pub fn create_object_from_msg(
+    identity: &Address,
+    recipient: &Address,
+    msg: models::Message,
+) -> Object {
     let unenc_msg = UnencryptedMsg {
         behavior_bitfield: 0,
         sender_ripe: msg.sender.clone(),

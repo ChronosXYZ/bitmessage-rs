@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use strum::{Display, EnumString};
 
 #[derive(sqlx::FromRow, Debug, PartialEq)]
@@ -16,7 +16,7 @@ pub(crate) struct Address {
 pub(crate) struct Object {
     pub hash: String,
     pub object_type: i32,
-    pub nonce: Vec<u8>,
+    pub nonce: Option<Vec<u8>>,
     pub data: Vec<u8>,
     pub expires: DateTime<Utc>,
     pub signature: Vec<u8>,

@@ -90,8 +90,9 @@ impl Handler {
         self.inventory_repo
             .get_missing_objects(&mut inv)
             .await
-            .expect("Repo not to fail");
+            .expect("db won't fail");
         if !inv.is_empty() {
+            log::debug!("requesting {} missing objects...", inv.len());
             return Some(NetworkMessage {
                 command: MessageCommand::GetData,
                 payload: MessagePayload::GetData { inventory: inv },
@@ -110,7 +111,7 @@ impl Handler {
 
         for obj in objects {
             let hash_str = bs58::encode(&obj.hash).into_string();
-            self.requested_objects.retain(|v| *v == hash_str);
+            self.requested_objects.retain(|v| *v != hash_str);
 
             if self
                 .inventory_repo
@@ -119,7 +120,10 @@ impl Handler {
                 .unwrap()
                 .is_some()
             {
-                log::debug!("object {hash_str} is already in the inventory, skipping it");
+                log::debug!(
+                    "object {} is already in the inventory, skipping it",
+                    hash_str
+                );
                 continue;
             }
 
@@ -131,19 +135,14 @@ impl Handler {
             let pow_check_res =
                 pow::check_pow(target, BigUint::from_bytes_be(&obj.nonce), obj.hash.clone());
             if pow_check_res.is_err() {
-                log::warn!(
-                    "object with hash {:?} has invalid nonce! skipping it",
-                    bs58::encode(obj.hash).into_string()
-                );
+                log::warn!("object {:?} has invalid nonce! skipping it", hash_str);
                 continue;
             }
 
             self.inventory_repo
                 .store_object(obj.clone())
                 .await
-                .expect("repo not to fail");
-
-            self.offer_inv().await;
+                .expect("db won't fail");
 
             let handler_result = match &obj.kind {
                 ObjectKind::Msg { encrypted: _ } => self.handle_msg_object(obj.clone()).await,
@@ -164,6 +163,8 @@ impl Handler {
                 continue;
             }
         }
+
+        self.offer_inv().await;
     }
 
     async fn handle_pubkey_object(&mut self, object: Object) -> Result<(), Box<dyn Error>> {

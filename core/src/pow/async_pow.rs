@@ -7,9 +7,7 @@ use log::info;
 use num_bigint::BigUint;
 use sha2::{Digest, Sha512};
 
-pub struct AsyncPoW {
-    // workers: Vec<JoinHandle<()>>,
-}
+pub struct AsyncPoW {}
 
 impl AsyncPoW {
     pub fn do_pow(target: BigUint, initial_hash: Vec<u8>) -> oneshot::Receiver<(BigUint, BigUint)> {
@@ -17,14 +15,14 @@ impl AsyncPoW {
         let (internal_sender, mut internal_receiver) = mpsc::channel(1);
 
         let mut workers = Vec::new();
-        let num_of_cores = num_cpus::get() - 1; // TODO make this setting configurable
+        let num_of_cores = num_cpus::get(); // TODO make this setting configurable
 
         for i in 0..num_of_cores {
             let t = target.clone();
             let ih = initial_hash.clone();
             let mut s = internal_sender.clone();
             let (term_tx, mut term_rx) = oneshot::channel();
-            task::spawn(async move {
+            task::spawn_blocking(move || {
                 info!("PoW has started");
 
                 let mut nonce: BigUint = BigUint::from(i);
@@ -38,7 +36,7 @@ impl AsyncPoW {
                 }
 
                 if !term_rx.try_recv().is_err() {
-                    s.send((trial_value, nonce)).await.unwrap();
+                    task::block_on(s.send((trial_value, nonce))).unwrap();
                 }
 
                 info!("PoW has ended");

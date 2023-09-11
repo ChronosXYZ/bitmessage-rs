@@ -1,8 +1,10 @@
 use crate::network::messages::Object;
 use crate::pow;
-use std::error::Error;
+use std::{
+    collections::{hash_map::RandomState, HashSet},
+    error::Error,
+};
 
-use async_std::task;
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{QueryBuilder, SqlitePool};
@@ -65,23 +67,33 @@ impl InventoryRepository for SqliteInventoryRepository {
     }
 
     /// Filter inventory vector with missing objects
-    async fn get_missing_objects(&self, hashes: &mut Vec<String>) -> Result<(), Box<dyn Error>> {
-        // delete items from the vector if they are in database
-        hashes.retain(|h| {
-            let res = task::block_on(
-                sqlx::query("SELECT hash FROM inventory WHERE hash = ?")
-                    .bind(h)
-                    .fetch_one(&self.pool),
-            );
-            match res {
-                Ok(_) => false,
-                Err(err) => match err {
-                    sqlx::Error::RowNotFound => true,
-                    _ => panic!("{}", err),
-                },
-            }
-        });
-        Ok(())
+    async fn get_missing_objects(
+        &self,
+        hashes: Vec<String>,
+    ) -> Result<Vec<String>, Box<dyn Error>> {
+        let incoming_objects: HashSet<String, RandomState> =
+            HashSet::from_iter(hashes.clone().into_iter());
+
+        let mut query_builder = QueryBuilder::new("SELECT hash FROM inventory WHERE hash IN (");
+        let mut separated = query_builder.separated(", ");
+        for h in hashes.clone() {
+            separated.push_bind(h);
+        }
+        separated.push_unseparated(") ");
+
+        let existing_objects = query_builder
+            .build_query_scalar::<String>()
+            .fetch_all(&self.pool)
+            .await?;
+
+        let existing_objects = HashSet::from_iter(existing_objects.into_iter());
+
+        let missing_objects: Vec<String> = incoming_objects
+            .difference(&existing_objects)
+            .map(|x| x.clone())
+            .collect();
+
+        Ok(missing_objects)
     }
 
     /// Store received object

@@ -82,20 +82,23 @@ impl Handler {
     }
 
     async fn handle_inv(&self, payload: MessagePayload) -> Option<NetworkMessage> {
-        let mut inv = if let MessagePayload::Inv { inventory } = payload {
+        let inv = if let MessagePayload::Inv { inventory } = payload {
             inventory
         } else {
             Vec::new()
         };
-        self.inventory_repo
-            .get_missing_objects(&mut inv)
+        let missing_objects = self
+            .inventory_repo
+            .get_missing_objects(inv)
             .await
             .expect("db won't fail");
-        if !inv.is_empty() {
-            log::debug!("requesting {} missing objects...", inv.len());
+        if !missing_objects.is_empty() {
+            log::debug!("requesting {} missing objects...", missing_objects.len());
             return Some(NetworkMessage {
                 command: MessageCommand::GetData,
-                payload: MessagePayload::GetData { inventory: inv },
+                payload: MessagePayload::GetData {
+                    inventory: missing_objects,
+                },
             });
         }
         None

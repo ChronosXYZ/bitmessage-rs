@@ -14,7 +14,8 @@ pub trait InventoryRepository: DynClone {
     async fn get_object(&self, hash: String) -> Result<Option<Object>, Box<dyn Error>>;
 
     /// Filter inventory vector with missing objects
-    async fn get_missing_objects(&self, hashes: &mut Vec<String>) -> Result<(), Box<dyn Error>>;
+    async fn get_missing_objects(&self, hashes: Vec<String>)
+        -> Result<Vec<String>, Box<dyn Error>>;
 
     /// Store received object
     async fn store_object(&mut self, o: Object) -> Result<(), Box<dyn Error>>;

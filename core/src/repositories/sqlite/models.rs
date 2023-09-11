@@ -12,7 +12,7 @@ pub(crate) struct Address {
     pub label: Option<String>,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Clone)]
 pub(crate) struct Object {
     pub hash: String,
     pub object_type: i32,

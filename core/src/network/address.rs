@@ -78,6 +78,7 @@ impl Address {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_leading(bytes: &[u8]) -> u32 {
     let mut zeros = 0;
     for &byte in bytes {

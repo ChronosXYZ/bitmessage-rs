@@ -181,7 +181,7 @@ impl From<mdns::Event> for BitmessageBehaviourEvent {
 }
 
 impl From<Void> for BitmessageBehaviourEvent {
-    fn from(value: Void) -> Self {
+    fn from(_value: Void) -> Self {
         BitmessageBehaviourEvent::Void
     }
 }

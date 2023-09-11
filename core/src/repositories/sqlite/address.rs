@@ -2,7 +2,7 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use ecies::{PublicKey, SecretKey};
-use sqlx::SqlitePool;
+use sqlx::{QueryBuilder, SqlitePool};
 
 use crate::{network::address::Address, repositories::address::AddressRepository};
 
@@ -82,17 +82,20 @@ impl SqliteAddressRepository {
 impl AddressRepository for SqliteAddressRepository {
     async fn store(&mut self, a: Address) -> Result<(), Box<dyn Error>> {
         let model = Self::serialize(a);
-        sqlx::query("INSERT INTO addresses (address, tag, public_encryption_key, public_signing_key, private_signing_key, private_encryption_key, label)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7)")
-            .bind(model.address)
-            .bind(model.tag)
-            .bind(model.public_encryption_key)
-            .bind(model.public_signing_key)
-            .bind(model.private_signing_key)
-            .bind(model.private_encryption_key)
-            .bind(model.label)
-            .execute(&self.pool)
-            .await?;
+        QueryBuilder::new(
+            "INSERT INTO addresses (address, tag, public_encryption_key, public_signing_key, private_signing_key, private_encryption_key, label) "
+        )
+        .push_values([model], |mut b, model| {
+            b.push_bind(model.address)
+             .push_bind(model.tag)
+             .push_bind(model.public_encryption_key)
+             .push_bind(model.public_signing_key)
+             .push_bind(model.private_signing_key)
+             .push_bind(model.private_encryption_key)
+             .push_bind(model.label);
+        }).build()
+          .execute(&self.pool)
+          .await?;
         Ok(())
     }
 

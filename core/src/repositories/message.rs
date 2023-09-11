@@ -9,7 +9,7 @@ use super::sqlite::models::{self, MessageStatus};
 
 #[async_trait]
 pub trait MessageRepository: DynClone {
-    /// Save message in repository
+    /// Save received message in repository
     async fn save(
         &mut self,
         hash: String,

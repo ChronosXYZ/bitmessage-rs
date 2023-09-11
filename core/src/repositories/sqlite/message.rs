@@ -2,7 +2,7 @@ use std::error::Error;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::{QueryBuilder, SqlitePool};
 
 use crate::{network::messages::UnencryptedMsg, repositories::message::MessageRepository};
 
@@ -21,7 +21,7 @@ impl SqliteMessageRepository {
 
 #[async_trait]
 impl MessageRepository for SqliteMessageRepository {
-    /// Save message in repository
+    /// Save received message in repository
     async fn save(
         &mut self,
         hash: String,
@@ -38,16 +38,7 @@ impl MessageRepository for SqliteMessageRepository {
             signature,
         };
 
-        sqlx::query("INSERT INTO messages (hash, sender, recipient, data, created_at, status, signature) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
-            .bind(model.hash)
-            .bind(model.sender)
-            .bind(model.recipient)
-            .bind(model.data)
-            .bind(model.created_at)
-            .bind(model.status)
-            .bind(model.signature)
-            .execute(&self.pool)
-            .await?;
+        self.save_model(model).await?;
 
         Ok(())
     }
@@ -83,16 +74,21 @@ impl MessageRepository for SqliteMessageRepository {
     }
 
     async fn save_model(&mut self, model: models::Message) -> Result<(), Box<dyn Error>> {
-        sqlx::query("INSERT INTO messages (hash, sender, recipient, data, created_at, status, signature) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
-            .bind(model.hash)
-            .bind(model.sender)
-            .bind(model.recipient)
-            .bind(model.data)
-            .bind(model.created_at)
-            .bind(model.status)
-            .bind(model.signature)
-            .execute(&self.pool)
-            .await?;
+        QueryBuilder::new(
+            "INSERT INTO messages (hash, sender, recipient, data, created_at, status, signature) ",
+        )
+        .push_values([model], |mut b, model| {
+            b.push_bind(model.hash)
+                .push_bind(model.sender)
+                .push_bind(model.recipient)
+                .push_bind(model.data)
+                .push_bind(model.created_at)
+                .push_bind(model.status)
+                .push_bind(model.signature);
+        })
+        .build()
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

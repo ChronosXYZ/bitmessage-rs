@@ -74,17 +74,7 @@ impl InventoryRepository for SqliteInventoryRepository {
         let incoming_objects: HashSet<String, RandomState> =
             HashSet::from_iter(hashes.clone().into_iter());
 
-        let mut query_builder = QueryBuilder::new("SELECT hash FROM inventory WHERE hash IN (");
-        let mut separated = query_builder.separated(", ");
-        for h in hashes.clone() {
-            separated.push_bind(h);
-        }
-        separated.push_unseparated(") ");
-
-        let existing_objects = query_builder
-            .build_query_scalar::<String>()
-            .fetch_all(&self.pool)
-            .await?;
+        let existing_objects = self.get().await?;
 
         let existing_objects = HashSet::from_iter(existing_objects.into_iter());
 
